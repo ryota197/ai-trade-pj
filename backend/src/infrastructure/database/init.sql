@@ -1,0 +1,230 @@
+-- init.sql
+-- Docker起動時に自動実行される初期化スクリプト
+
+-- 拡張機能
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- =====================================================
+-- market_snapshots: マーケット状態の履歴
+-- =====================================================
+CREATE TABLE market_snapshots (
+    id SERIAL PRIMARY KEY,
+    recorded_at TIMESTAMP NOT NULL,
+
+    -- VIX関連
+    vix DECIMAL(10,2),
+    vix_change DECIMAL(10,2),
+
+    -- Put/Call Ratio
+    put_call_ratio DECIMAL(10,4),
+
+    -- 騰落レシオ
+    advancing_issues INTEGER,
+    declining_issues INTEGER,
+    advance_decline_ratio DECIMAL(10,4),
+
+    -- S&P500指標
+    sp500_close DECIMAL(10,2),
+    sp500_rsi DECIMAL(10,2),
+    sp500_above_200ma BOOLEAN,
+    sp500_distance_from_200ma DECIMAL(10,2),
+
+    -- 判定結果
+    market_status VARCHAR(20) NOT NULL,
+    confidence DECIMAL(5,2),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_market_status CHECK (market_status IN ('risk_on', 'risk_off', 'neutral'))
+);
+
+COMMENT ON TABLE market_snapshots IS 'マーケット状態の日次スナップショット';
+COMMENT ON COLUMN market_snapshots.recorded_at IS 'スナップショット取得日時';
+COMMENT ON COLUMN market_snapshots.vix IS 'VIX指数（恐怖指数）';
+COMMENT ON COLUMN market_snapshots.vix_change IS 'VIX前日比';
+COMMENT ON COLUMN market_snapshots.put_call_ratio IS 'Put/Call Ratio（1.0超で弱気優勢）';
+COMMENT ON COLUMN market_snapshots.advancing_issues IS '上昇銘柄数';
+COMMENT ON COLUMN market_snapshots.declining_issues IS '下落銘柄数';
+COMMENT ON COLUMN market_snapshots.advance_decline_ratio IS '騰落レシオ（上昇/下落）';
+COMMENT ON COLUMN market_snapshots.sp500_close IS 'S&P500終値';
+COMMENT ON COLUMN market_snapshots.sp500_rsi IS 'S&P500のRSI（14日）';
+COMMENT ON COLUMN market_snapshots.sp500_above_200ma IS 'S&P500が200日移動平均線より上か';
+COMMENT ON COLUMN market_snapshots.sp500_distance_from_200ma IS '200MAからの乖離率（%）';
+COMMENT ON COLUMN market_snapshots.market_status IS '判定結果: risk_on/risk_off/neutral';
+COMMENT ON COLUMN market_snapshots.confidence IS '判定の確信度（0.0-1.0）';
+
+CREATE INDEX idx_market_snapshots_recorded_at ON market_snapshots(recorded_at DESC);
+
+-- =====================================================
+-- screener_results: CAN-SLIMスクリーニング結果キャッシュ
+-- =====================================================
+CREATE TABLE screener_results (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    screened_at TIMESTAMP NOT NULL,
+
+    -- 銘柄基本情報
+    name VARCHAR(100),
+    industry VARCHAR(50),
+    market_cap BIGINT,
+
+    -- 株価情報
+    price DECIMAL(10,2),
+    change_percent DECIMAL(10,2),
+    volume BIGINT,
+    avg_volume_50d BIGINT,
+
+    -- CAN-SLIM指標
+    eps_growth_q DECIMAL(10,2),
+    eps_growth_y DECIMAL(10,2),
+    distance_from_high DECIMAL(10,2),
+    volume_ratio DECIMAL(10,2),
+    rs_rating DECIMAL(10,2),
+    institutional_holding DECIMAL(10,2),
+
+    -- 判定結果
+    passes_canslim BOOLEAN DEFAULT FALSE,
+    canslim_score INTEGER,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT unique_symbol_screened UNIQUE (symbol, screened_at)
+);
+
+COMMENT ON TABLE screener_results IS 'CAN-SLIMスクリーニング結果のキャッシュ（30日保持）';
+COMMENT ON COLUMN screener_results.symbol IS 'ティッカーシンボル（例: AAPL）';
+COMMENT ON COLUMN screener_results.screened_at IS 'スクリーニング実行日時';
+COMMENT ON COLUMN screener_results.name IS '企業名';
+COMMENT ON COLUMN screener_results.industry IS '業種';
+COMMENT ON COLUMN screener_results.market_cap IS '時価総額（USD）';
+COMMENT ON COLUMN screener_results.price IS '株価';
+COMMENT ON COLUMN screener_results.change_percent IS '前日比変動率（%）';
+COMMENT ON COLUMN screener_results.volume IS '出来高';
+COMMENT ON COLUMN screener_results.avg_volume_50d IS '50日平均出来高';
+COMMENT ON COLUMN screener_results.eps_growth_q IS 'C: 四半期EPS成長率（%）';
+COMMENT ON COLUMN screener_results.eps_growth_y IS 'A: 年間EPS成長率（%）';
+COMMENT ON COLUMN screener_results.distance_from_high IS 'N: 52週高値からの乖離率（%、負値）';
+COMMENT ON COLUMN screener_results.volume_ratio IS 'S: 出来高倍率（当日/50日平均）';
+COMMENT ON COLUMN screener_results.rs_rating IS 'L: 相対力評価（0-99）';
+COMMENT ON COLUMN screener_results.institutional_holding IS 'I: 機関投資家保有率（%）';
+COMMENT ON COLUMN screener_results.passes_canslim IS 'CAN-SLIM条件を満たすか';
+COMMENT ON COLUMN screener_results.canslim_score IS '総合スコア（0-100）';
+
+CREATE INDEX idx_screener_results_symbol ON screener_results(symbol);
+CREATE INDEX idx_screener_results_screened_at ON screener_results(screened_at DESC);
+CREATE INDEX idx_screener_results_passes ON screener_results(passes_canslim, screened_at DESC);
+CREATE INDEX idx_screener_results_rs_rating ON screener_results(rs_rating DESC);
+
+-- =====================================================
+-- watchlist: ウォッチリスト
+-- =====================================================
+CREATE TABLE watchlist (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL UNIQUE,
+
+    -- 目標価格
+    target_entry_price DECIMAL(10,2),
+    stop_loss_price DECIMAL(10,2),
+    target_profit_price DECIMAL(10,2),
+
+    -- メモ
+    notes TEXT,
+
+    -- 追加情報
+    pattern_detected VARCHAR(50),
+    alert_enabled BOOLEAN DEFAULT TRUE,
+
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE watchlist IS '監視銘柄リスト';
+COMMENT ON COLUMN watchlist.symbol IS 'ティッカーシンボル';
+COMMENT ON COLUMN watchlist.target_entry_price IS 'エントリー目標価格';
+COMMENT ON COLUMN watchlist.stop_loss_price IS 'ストップロス価格';
+COMMENT ON COLUMN watchlist.target_profit_price IS '利確目標価格';
+COMMENT ON COLUMN watchlist.notes IS 'メモ（エントリー理由など）';
+COMMENT ON COLUMN watchlist.pattern_detected IS '検出されたチャートパターン';
+COMMENT ON COLUMN watchlist.alert_enabled IS 'アラート有効フラグ';
+COMMENT ON COLUMN watchlist.added_at IS '追加日時';
+COMMENT ON COLUMN watchlist.updated_at IS '更新日時';
+
+CREATE INDEX idx_watchlist_symbol ON watchlist(symbol);
+
+-- =====================================================
+-- paper_trades: ペーパートレード記録
+-- =====================================================
+CREATE TABLE paper_trades (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+
+    -- トレード情報
+    trade_type VARCHAR(10) NOT NULL,
+    quantity INTEGER NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    total_amount DECIMAL(12,2) GENERATED ALWAYS AS (quantity * price) STORED,
+
+    -- 実行日時
+    traded_at TIMESTAMP NOT NULL,
+
+    -- 関連情報
+    notes TEXT,
+    strategy VARCHAR(50),
+
+    -- ポジション管理用
+    position_id UUID,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_trade_type CHECK (trade_type IN ('buy', 'sell')),
+    CONSTRAINT positive_quantity CHECK (quantity > 0),
+    CONSTRAINT positive_price CHECK (price > 0)
+);
+
+COMMENT ON TABLE paper_trades IS 'ペーパートレード（仮想売買）記録';
+COMMENT ON COLUMN paper_trades.symbol IS 'ティッカーシンボル';
+COMMENT ON COLUMN paper_trades.trade_type IS '売買種別: buy/sell';
+COMMENT ON COLUMN paper_trades.quantity IS '数量（株数）';
+COMMENT ON COLUMN paper_trades.price IS '約定価格';
+COMMENT ON COLUMN paper_trades.total_amount IS '約定金額（自動計算: quantity * price）';
+COMMENT ON COLUMN paper_trades.traded_at IS '約定日時';
+COMMENT ON COLUMN paper_trades.notes IS 'メモ（エントリー/エグジット理由）';
+COMMENT ON COLUMN paper_trades.strategy IS '戦略: breakout/pullback/swing等';
+COMMENT ON COLUMN paper_trades.position_id IS 'ポジションID（同一ポジションのbuy/sellを紐付け）';
+
+CREATE INDEX idx_paper_trades_symbol ON paper_trades(symbol);
+CREATE INDEX idx_paper_trades_traded_at ON paper_trades(traded_at DESC);
+CREATE INDEX idx_paper_trades_position ON paper_trades(position_id);
+
+-- =====================================================
+-- price_cache: 株価データキャッシュ
+-- =====================================================
+CREATE TABLE price_cache (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+
+    -- OHLCV
+    open DECIMAL(10,2),
+    high DECIMAL(10,2),
+    low DECIMAL(10,2),
+    close DECIMAL(10,2),
+    adj_close DECIMAL(10,2),
+    volume BIGINT,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT unique_symbol_date UNIQUE (symbol, date)
+);
+
+COMMENT ON TABLE price_cache IS '株価データキャッシュ（API呼び出し削減用、2年保持）';
+COMMENT ON COLUMN price_cache.symbol IS 'ティッカーシンボル';
+COMMENT ON COLUMN price_cache.date IS '取引日';
+COMMENT ON COLUMN price_cache.open IS '始値';
+COMMENT ON COLUMN price_cache.high IS '高値';
+COMMENT ON COLUMN price_cache.low IS '安値';
+COMMENT ON COLUMN price_cache.close IS '終値';
+COMMENT ON COLUMN price_cache.adj_close IS '調整後終値（分割・配当調整済み）';
+COMMENT ON COLUMN price_cache.volume IS '出来高';
+
+CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
