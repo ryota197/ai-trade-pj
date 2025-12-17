@@ -88,7 +88,7 @@ pip install -r requirements.txt
 uvicorn src.main:app --reload --port 8000
 ```
 
-API確認: http://localhost:8000/docs
+API確認: http://localhost:8000/api/docs
 
 ### 5. Frontend起動
 
