@@ -2,7 +2,7 @@
 
 ## 概要
 
-Next.js 14 + TypeScript + TailwindCSS を使用したフロントエンド開発のコーディング規約。
+Next.js 16 + TypeScript + TailwindCSS + shadcn/ui を使用したフロントエンド開発のコーディング規約。
 
 ---
 
@@ -12,11 +12,15 @@ Next.js 14 + TypeScript + TailwindCSS を使用したフロントエンド開発
 
 ```
 src/
-├── app/           # App Router（ページ）
-├── components/    # コンポーネント
-├── hooks/         # カスタムフック
-├── lib/           # ユーティリティ
-└── types/         # 型定義
+├── app/              # App Router（ページ）
+├── components/       # コンポーネント
+│   ├── ui/           # shadcn/ui コンポーネント（自動生成）
+│   ├── layout/       # レイアウトコンポーネント
+│   └── {feature}/    # 機能別コンポーネント
+├── hooks/            # カスタムフック
+├── lib/              # ユーティリティ
+│   └── utils.ts      # cn() など共通関数
+└── types/            # 型定義
 ```
 
 ### ファイル命名規則
@@ -187,6 +191,100 @@ import { cn } from '@/lib/utils';
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
   {/* ... */}
 </div>
+```
+
+---
+
+## shadcn/ui
+
+### 概要
+
+- **コピー&ペースト方式** のコンポーネントライブラリ
+- コンポーネントは `components/ui/` に配置される
+- Radix UI + TailwindCSS ベースで、カスタマイズ性が高い
+
+### コンポーネントの追加
+
+```bash
+# 必要なコンポーネントのみ追加
+npx shadcn@latest add card
+npx shadcn@latest add button badge
+npx shadcn@latest add table dialog
+```
+
+### コンポーネントの階層
+
+```
+components/
+├── ui/                    # shadcn/ui（自動生成、基本的に編集しない）
+│   ├── card.tsx
+│   ├── button.tsx
+│   └── badge.tsx
+├── layout/                # レイアウト（カスタム）
+│   └── Header.tsx
+└── market/                # 機能別（カスタム、ui/を組み合わせる）
+    ├── MarketStatus.tsx   # Card + Badge を使用
+    └── IndicatorCard.tsx  # Card を拡張
+```
+
+### 使用例
+
+```tsx
+// components/market/MarketStatus.tsx
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
+interface MarketStatusProps {
+  status: "risk_on" | "risk_off" | "neutral";
+  confidence: number;
+}
+
+export function MarketStatus({ status, confidence }: MarketStatusProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Market Status</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Badge variant={status === "risk_on" ? "default" : "destructive"}>
+          {status.toUpperCase()}
+        </Badge>
+        <p>Confidence: {(confidence * 100).toFixed(0)}%</p>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+### カスタマイズ方針
+
+| 種類 | 方針 |
+|------|------|
+| `ui/` 内のファイル | 基本的に編集しない（再生成時に上書きされる可能性） |
+| スタイル調整 | `globals.css` の CSS変数で調整 |
+| 機能拡張 | 新しいコンポーネントを `ui/` 外に作成し、`ui/` を組み合わせる |
+
+### テーマ設定
+
+```css
+/* globals.css */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    /* ... */
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    /* ... */
+  }
+}
 ```
 
 ---

@@ -10,9 +10,11 @@
 
 | レイヤー | 技術 | バージョン | 用途 |
 |---------|------|-----------|------|
-| **Frontend** | Next.js | 14.x | Reactフレームワーク |
+| **Frontend** | Next.js | 16.x | Reactフレームワーク |
+| | React | 19.x | UIライブラリ |
 | | TypeScript | 5.x | 型安全な開発 |
-| | TailwindCSS | 3.x | スタイリング |
+| | TailwindCSS | 4.x | スタイリング |
+| | shadcn/ui | latest | UIコンポーネント |
 | | TanStack Query | 5.x | データフェッチ・キャッシュ |
 | | Lightweight Charts | 4.x | 金融チャート描画 |
 | **Backend** | Python | 3.11+ | サーバーサイド言語 |
@@ -40,10 +42,22 @@
 - `any` 型の使用は禁止
 - 型定義は `src/types/` に集約
 
-### TailwindCSS
+### TailwindCSS 4
 
 - カスタムテーマは最小限に
 - `@apply` の使用は避け、クラス直書きを基本とする
+
+### shadcn/ui
+
+- **コピー&ペースト方式** のコンポーネントライブラリ
+- Radix UI + TailwindCSS ベース
+- カスタマイズ性が高い（コンポーネントは `components/ui/` に配置）
+- 必要なコンポーネントのみ追加（`npx shadcn@latest add <component>`）
+
+**使用するコンポーネント例**:
+- Card, Button, Badge（基本UI）
+- Table, Dialog（データ表示）
+- Select, Input（フォーム）
 
 ### TanStack Query (React Query)
 

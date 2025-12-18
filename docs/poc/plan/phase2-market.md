@@ -113,13 +113,46 @@ curl http://localhost:8000/api/market/status
 
 ---
 
-### 2.5 Frontend - コンポーネントリファクタリング
+### 2.5 Frontend - shadcn/ui セットアップ
+
+UIコンポーネントライブラリとして shadcn/ui を導入する。
+
+- [ ] shadcn/ui 初期化（`npx shadcn@latest init`）
+- [ ] 基本コンポーネントインストール（Card, Button, Badge）
+- [ ] テーマ設定（ダークモード対応）
+- [ ] globals.css の調整
+
+**セットアップコマンド**:
+```bash
+cd frontend
+npx shadcn@latest init
+npx shadcn@latest add card button badge
+```
+
+**成果物**:
+```
+frontend/
+├── components.json           # shadcn/ui設定
+└── src/
+    ├── components/
+    │   └── ui/               # shadcn/uiコンポーネント
+    │       ├── card.tsx
+    │       ├── button.tsx
+    │       └── badge.tsx
+    └── lib/
+        └── utils.ts          # cn() ユーティリティ
+```
+
+---
+
+### 2.6 Frontend - コンポーネントリファクタリング
 
 Phase 1で作成した `page.tsx` を共通コンポーネントに分解する。
+shadcn/ui の Card コンポーネントをベースに実装。
 
 - [ ] `Header` コンポーネント抽出
-- [ ] `StatusCard` 共通UIコンポーネント作成
-- [ ] `ModuleCard` 共通UIコンポーネント作成
+- [ ] `StatusCard` 共通UIコンポーネント作成（shadcn/ui Card使用）
+- [ ] `ModuleCard` 共通UIコンポーネント作成（shadcn/ui Card使用）
 - [ ] `page.tsx` のリファクタリング
 
 **成果物**:
@@ -128,13 +161,16 @@ frontend/src/components/
 ├── layout/
 │   └── Header.tsx
 └── ui/
-    ├── StatusCard.tsx
-    └── ModuleCard.tsx
+    ├── card.tsx              # shadcn/ui（自動生成）
+    ├── button.tsx            # shadcn/ui（自動生成）
+    ├── badge.tsx             # shadcn/ui（自動生成）
+    ├── StatusCard.tsx        # カスタム（Cardを拡張）
+    └── ModuleCard.tsx        # カスタム（Cardを拡張）
 ```
 
 ---
 
-### 2.6 Frontend - ダッシュボードUI
+### 2.7 Frontend - ダッシュボードUI
 
 - [ ] `app/page.tsx` ダッシュボードページ実装
 - [ ] `MarketStatus` コンポーネント作成
