@@ -1,4 +1,7 @@
 import { getHealth } from "@/lib/api";
+import { Header } from "@/components/layout/Header";
+import { StatusCard } from "@/components/ui/StatusCard";
+import { ModuleCard } from "@/components/ui/ModuleCard";
 
 export default async function Home() {
   let healthStatus = { status: "unknown", database: "unknown" };
@@ -14,127 +17,65 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900">
-      {/* Header */}
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="mx-auto max-w-7xl px-4 py-4">
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-            AI Trade App
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            CAN-SLIM投資支援アプリケーション
-          </p>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background">
+      <Header />
 
-      {/* Main */}
       <main className="mx-auto max-w-7xl px-4 py-8">
         {/* Status Cards */}
         <div className="grid gap-4 md:grid-cols-3">
-          {/* API Status */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              API Status
-            </h2>
-            <div className="mt-2 flex items-center gap-2">
-              <span
-                className={`h-3 w-3 rounded-full ${
-                  error
-                    ? "bg-red-500"
-                    : healthStatus.status === "ok"
-                      ? "bg-green-500"
-                      : "bg-yellow-500"
-                }`}
-              />
-              <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                {error ? "Error" : healthStatus.status.toUpperCase()}
-              </span>
-            </div>
-            {error && (
-              <p className="mt-2 text-sm text-red-500">{error}</p>
-            )}
-          </div>
+          <StatusCard
+            title="API Status"
+            value={error ? "Error" : healthStatus.status.toUpperCase()}
+            status={
+              error
+                ? "error"
+                : healthStatus.status === "ok"
+                  ? "success"
+                  : "warning"
+            }
+            error={error}
+          />
 
-          {/* Database Status */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Database
-            </h2>
-            <div className="mt-2 flex items-center gap-2">
-              <span
-                className={`h-3 w-3 rounded-full ${
-                  healthStatus.database === "connected"
-                    ? "bg-green-500"
-                    : "bg-red-500"
-                }`}
-              />
-              <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                {healthStatus.database === "connected"
-                  ? "Connected"
-                  : "Disconnected"}
-              </span>
-            </div>
-          </div>
+          <StatusCard
+            title="Database"
+            value={
+              healthStatus.database === "connected"
+                ? "Connected"
+                : "Disconnected"
+            }
+            status={
+              healthStatus.database === "connected" ? "success" : "error"
+            }
+          />
 
-          {/* Phase */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Current Phase
-            </h2>
-            <div className="mt-2">
-              <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Phase 1
-              </span>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                基盤構築
-              </p>
-            </div>
-          </div>
+          <StatusCard
+            title="Current Phase"
+            value="Phase 2"
+            description="Market Module"
+            status="neutral"
+          />
         </div>
 
         {/* Module Cards */}
-        <h2 className="mt-8 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Modules
-        </h2>
+        <h2 className="mt-8 text-lg font-semibold">Modules</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          {/* Market Module */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <h3 className="font-medium text-zinc-900 dark:text-zinc-100">
-              Market Module
-            </h3>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              マーケット状態の判定・可視化
-            </p>
-            <span className="mt-4 inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              Coming Soon
-            </span>
-          </div>
+          <ModuleCard
+            title="Market Module"
+            description="マーケット状態の判定・可視化"
+            status="active"
+          />
 
-          {/* Screener Module */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <h3 className="font-medium text-zinc-900 dark:text-zinc-100">
-              Screener Module
-            </h3>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              CAN-SLIM条件スクリーニング
-            </p>
-            <span className="mt-4 inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              Coming Soon
-            </span>
-          </div>
+          <ModuleCard
+            title="Screener Module"
+            description="CAN-SLIM条件スクリーニング"
+            status="coming-soon"
+          />
 
-          {/* Portfolio Module */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <h3 className="font-medium text-zinc-900 dark:text-zinc-100">
-              Portfolio Module
-            </h3>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              ウォッチリスト・ペーパートレード
-            </p>
-            <span className="mt-4 inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              Coming Soon
-            </span>
-          </div>
+          <ModuleCard
+            title="Portfolio Module"
+            description="ウォッチリスト・ペーパートレード"
+            status="coming-soon"
+          />
         </div>
       </main>
     </div>
