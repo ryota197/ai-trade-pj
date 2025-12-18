@@ -3,6 +3,7 @@
  */
 
 import type { ApiResponse, HealthResponse } from "@/types/api";
+import type { MarketStatusResponse, MarketIndicatorsResponse } from "@/types/market";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -30,4 +31,22 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
  */
 export async function getHealth(): Promise<ApiResponse<HealthResponse>> {
   return fetchApi<ApiResponse<HealthResponse>>("/health");
+}
+
+/**
+ * マーケット状態取得API
+ */
+export async function getMarketStatus(): Promise<ApiResponse<MarketStatusResponse>> {
+  return fetchApi<ApiResponse<MarketStatusResponse>>("/market/status", {
+    cache: "no-store",
+  });
+}
+
+/**
+ * マーケット指標取得API
+ */
+export async function getMarketIndicators(): Promise<ApiResponse<MarketIndicatorsResponse>> {
+  return fetchApi<ApiResponse<MarketIndicatorsResponse>>("/market/indicators", {
+    cache: "no-store",
+  });
 }

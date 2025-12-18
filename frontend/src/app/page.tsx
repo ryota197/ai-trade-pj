@@ -2,6 +2,7 @@ import { getHealth } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { StatusCard } from "@/components/ui/StatusCard";
 import { ModuleCard } from "@/components/ui/ModuleCard";
+import { MarketDashboard } from "@/components/market";
 
 export default async function Home() {
   let healthStatus = { status: "unknown", database: "unknown" };
@@ -56,27 +57,35 @@ export default async function Home() {
           />
         </div>
 
+        {/* Market Dashboard */}
+        <section className="mt-8">
+          <h2 className="mb-4 text-lg font-semibold">Market Overview</h2>
+          <MarketDashboard />
+        </section>
+
         {/* Module Cards */}
-        <h2 className="mt-8 text-lg font-semibold">Modules</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <ModuleCard
-            title="Market Module"
-            description="マーケット状態の判定・可視化"
-            status="active"
-          />
+        <section className="mt-8">
+          <h2 className="mb-4 text-lg font-semibold">Modules</h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            <ModuleCard
+              title="Market Module"
+              description="マーケット状態の判定・可視化"
+              status="active"
+            />
 
-          <ModuleCard
-            title="Screener Module"
-            description="CAN-SLIM条件スクリーニング"
-            status="coming-soon"
-          />
+            <ModuleCard
+              title="Screener Module"
+              description="CAN-SLIM条件スクリーニング"
+              status="coming-soon"
+            />
 
-          <ModuleCard
-            title="Portfolio Module"
-            description="ウォッチリスト・ペーパートレード"
-            status="coming-soon"
-          />
-        </div>
+            <ModuleCard
+              title="Portfolio Module"
+              description="ウォッチリスト・ペーパートレード"
+              status="coming-soon"
+            />
+          </div>
+        </section>
       </main>
     </div>
   );
