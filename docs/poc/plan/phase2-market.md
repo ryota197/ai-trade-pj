@@ -113,7 +113,28 @@ curl http://localhost:8000/api/market/status
 
 ---
 
-### 2.5 Frontend - ダッシュボードUI
+### 2.5 Frontend - コンポーネントリファクタリング
+
+Phase 1で作成した `page.tsx` を共通コンポーネントに分解する。
+
+- [ ] `Header` コンポーネント抽出
+- [ ] `StatusCard` 共通UIコンポーネント作成
+- [ ] `ModuleCard` 共通UIコンポーネント作成
+- [ ] `page.tsx` のリファクタリング
+
+**成果物**:
+```
+frontend/src/components/
+├── layout/
+│   └── Header.tsx
+└── ui/
+    ├── StatusCard.tsx
+    └── ModuleCard.tsx
+```
+
+---
+
+### 2.6 Frontend - ダッシュボードUI
 
 - [ ] `app/page.tsx` ダッシュボードページ実装
 - [ ] `MarketStatus` コンポーネント作成
@@ -128,6 +149,11 @@ frontend/src/
 ├── app/
 │   └── page.tsx              # Dashboard
 ├── components/
+│   ├── layout/
+│   │   └── Header.tsx
+│   ├── ui/
+│   │   ├── StatusCard.tsx
+│   │   └── ModuleCard.tsx
 │   └── market/
 │       ├── MarketStatus.tsx
 │       ├── IndicatorCard.tsx
