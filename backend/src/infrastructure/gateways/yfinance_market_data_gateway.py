@@ -116,30 +116,18 @@ class YFinanceMarketDataGateway(MarketDataRepository):
         Put/Call Ratioを取得
 
         Note:
-            yfinanceでは直接Put/Call Ratioを取得できないため、
-            CBOEのEquity Put/Call Ratio（^CPCE）を使用。
-            取得できない場合はデフォルト値0.85（中立）を返す。
+            yfinanceでは直接Put/Call Ratioを取得できない。
+            ^CPCE（CBOE Equity Put/Call Ratio）はYahoo Financeで
+            提供されなくなったため、POCではデフォルト値を返す。
+
+            本番環境では以下のデータソースを検討:
+            - CBOE公式API（有料）
+            - Alpha Vantage
+            - Quandl
 
         Returns:
-            float: Put/Call Ratio
+            float: Put/Call Ratio（POCではデフォルト値 0.85）
         """
-        try:
-            # CBOE Equity Put/Call Ratio
-            ticker = yf.Ticker("^CPCE")
-            info = ticker.info
-
-            price = info.get("regularMarketPrice")
-            if price is not None:
-                return round(float(price), 3)
-
-            # 代替: 履歴データから取得
-            hist = ticker.history(period="5d", interval="1d")
-            if not hist.empty:
-                return round(float(hist["Close"].iloc[-1]), 3)
-
-        except Exception:
-            pass
-
-        # フォールバック: 中立値を返す
-        # TODO: 本番環境では別のデータソースを検討
+        # TODO: 本番環境では別のデータソースから取得
+        # POCではデフォルト値（中立）を返す
         return 0.85
