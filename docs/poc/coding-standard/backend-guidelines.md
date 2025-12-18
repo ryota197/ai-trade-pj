@@ -324,6 +324,153 @@ def get_latest_snapshot(db: Session) -> MarketSnapshot | None:
 
 ---
 
+## 型定義の配置ルール
+
+### 原則
+
+**ビジネス概念を表す型はDomain層に配置する。**
+
+各層で定義すべき型を明確に区別し、適切な場所に配置する。
+
+### 配置ガイドライン
+
+| 型の種類 | 配置場所 | 例 |
+|---------|---------|-----|
+| ビジネスエンティティ | `domain/entities/` | `Quote`, `Stock`, `Order` |
+| 値オブジェクト | `domain/value_objects/` | `Price`, `Symbol`, `Period` |
+| ユースケース出力 | `application/dto/` | `GetMarketStatusOutput` |
+| APIレスポンス | `presentation/schemas/` | `QuoteResponse` (Pydantic) |
+| 外部API固有の型 | `infrastructure/gateways/` | （基本的に作らない） |
+
+### ✅ 正しい例
+
+```python
+# domain/entities/quote.py
+@dataclass(frozen=True)
+class Quote:
+    """株価エンティティ（ドメイン層）"""
+    symbol: str
+    price: float
+    change: float
+    ...
+
+# infrastructure/gateways/yfinance_gateway.py
+from src.domain.entities.quote import Quote
+
+class YFinanceGateway:
+    def get_quote(self, symbol: str) -> Quote:  # ドメイン型を返す
+        ...
+        return Quote(symbol=symbol, price=price, ...)
+
+# presentation/api/data_controller.py
+from src.domain.entities.quote import Quote
+
+def _quote_to_response(quote: Quote) -> QuoteResponse:
+    """ドメイン → レスポンススキーマ変換"""
+    return QuoteResponse(
+        symbol=quote.symbol,
+        price=quote.price,
+        ...
+    )
+```
+
+### ❌ 避けるべき例
+
+```python
+# infrastructure/gateways/yfinance_gateway.py
+
+# Bad: ゲートウェイ内にドメイン概念の型を定義
+@dataclass
+class QuoteData:  # ← これはDomain層に置くべき
+    symbol: str
+    price: float
+    ...
+
+class YFinanceGateway:
+    def get_quote(self, symbol: str) -> QuoteData:
+        ...
+```
+
+### 判断基準
+
+型を定義する際は以下を考慮する:
+
+1. **この型はビジネス概念を表しているか？**
+   - Yes → `domain/entities/` または `domain/value_objects/`
+   - No → 用途に応じた層
+
+2. **この型は複数のゲートウェイ/リポジトリで再利用されるか？**
+   - Yes → 間違いなくDomain層
+   - No → それでもビジネス概念ならDomain層
+
+3. **外部APIのレスポンス構造をそのまま表す型か？**
+   - Yes → 作らない（直接ドメイン型に変換）
+   - 複雑な場合のみInfrastructure層に内部型を作成
+
+### frozen=True の推奨
+
+ドメインエンティティには `frozen=True` を使用し、不変オブジェクトとして扱う。
+
+```python
+@dataclass(frozen=True)  # 推奨: イミュータブル
+class Quote:
+    symbol: str
+    price: float
+```
+
+これにより:
+- 予期しない変更を防止
+- ハッシュ可能になる（dictのキーやsetに使える）
+- スレッドセーフになる
+
+### Domain → Presentation の変換関数
+
+Presentation層では、ドメインエンティティをレスポンススキーマに変換する関数を定義する。
+
+```python
+# presentation/api/data_controller.py
+
+def _quote_to_response(quote: Quote) -> QuoteResponse:
+    """ドメインエンティティをレスポンススキーマに変換"""
+    return QuoteResponse(
+        symbol=quote.symbol,
+        price=quote.price,
+        ...
+    )
+```
+
+#### なぜ変換が必要か
+
+1. **依存方向の制御**
+   - `Quote`（Domain）: 何にも依存しない純粋なビジネスロジック
+   - `QuoteResponse`（Presentation）: Pydantic、バリデーション、OpenAPI生成などAPI固有の関心事
+
+2. **変更の影響範囲を限定**
+
+   | 変更内容 | Quote | QuoteResponse | Gateway | Controller |
+   |---------|-------|---------------|---------|------------|
+   | APIレスポンス形式変更 | 不変 | 変更 | 不変 | 変換関数のみ |
+   | ビジネスロジック追加 | 変更 | 不変 | 不変 | 不変 |
+   | 外部API変更 | 不変 | 不変 | 変更 | 不変 |
+
+3. **API専用のフィールド追加が容易**
+
+   ```python
+   # 表示用フォーマットなど、API専用の加工
+   def _quote_to_response(quote: Quote) -> QuoteResponse:
+       return QuoteResponse(
+           ...
+           formatted_price=f"${quote.price:.2f}",  # API専用
+       )
+   ```
+
+#### 命名規則
+
+- プライベート関数として `_` プレフィックスを付ける
+- `_{entity}_to_{response}` の形式で命名
+
+---
+
 ## クリーンアーキテクチャのコード例
 
 ### Domain層 - エンティティ
