@@ -238,6 +238,24 @@ frontend/src/
 
 ---
 
+## 将来対応（バックログ）
+
+### バッチ処理によるスナップショット保存
+
+現在のAPIはリアルタイムでyfinanceからデータを取得し、DBには保存しない。
+履歴分析やトレンド把握のため、将来的にバッチジョブでスナップショットを保存する。
+
+**実装方針:**
+- 1時間ごとのcronジョブ（またはAPScheduler）
+- `GetMarketStatusUseCase` → `PostgresMarketRepository.save()`
+- 履歴取得API: `GET /api/market/history`
+
+**関連ファイル:**
+- `infrastructure/repositories/postgres_market_repository.py` - 保存ロジック実装済み
+- `infrastructure/database/models/market_snapshot_model.py` - モデル定義済み
+
+---
+
 ## 次のフェーズへ
 
 Phase 2 完了後 → [Phase 3: Screener Module](./phase3-screener.md)

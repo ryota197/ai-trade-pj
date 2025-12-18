@@ -22,7 +22,7 @@ PostgreSQL 16 を使用。Docker コンテナで起動。
 
 ### market_snapshots
 
-マーケット状態の履歴を保存。日次でスナップショットを取得。
+マーケット状態の履歴を保存。1時間ごとにスナップショットを取得。
 
 ```sql
 CREATE TABLE market_snapshots (
@@ -30,30 +30,32 @@ CREATE TABLE market_snapshots (
     recorded_at TIMESTAMP NOT NULL,
 
     -- VIX関連
-    vix DECIMAL(10,2),
-    vix_change DECIMAL(10,2),
-
-    -- Put/Call Ratio
-    put_call_ratio DECIMAL(10,4),
-
-    -- 騰落レシオ
-    advancing_issues INTEGER,
-    declining_issues INTEGER,
-    advance_decline_ratio DECIMAL(10,4),
+    vix DECIMAL(10,2) NOT NULL,
+    vix_signal VARCHAR(20) NOT NULL,  -- 'bullish', 'neutral', 'bearish'
 
     -- S&P500指標
-    sp500_close DECIMAL(10,2),
-    sp500_rsi DECIMAL(10,2),
-    sp500_above_200ma BOOLEAN,
-    sp500_distance_from_200ma DECIMAL(10,2),
+    sp500_price DECIMAL(12,2) NOT NULL,
+    sp500_rsi DECIMAL(5,2) NOT NULL,
+    sp500_rsi_signal VARCHAR(20) NOT NULL,  -- 'bullish', 'neutral', 'bearish'
+    sp500_ma200 DECIMAL(12,2) NOT NULL,
+    sp500_above_ma200 BOOLEAN NOT NULL,
+
+    -- Put/Call Ratio
+    put_call_ratio DECIMAL(6,4) NOT NULL,
+    put_call_signal VARCHAR(20) NOT NULL,  -- 'bullish', 'neutral', 'bearish'
 
     -- 判定結果
-    market_status VARCHAR(20) NOT NULL,  -- 'risk_on', 'risk_off', 'neutral'
-    confidence DECIMAL(5,2),
+    market_condition VARCHAR(20) NOT NULL,  -- 'risk_on', 'risk_off', 'neutral'
+    confidence DECIMAL(5,4) NOT NULL,
+    score INTEGER NOT NULL,  -- -5 〜 +5
+    recommendation VARCHAR(500) NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT valid_market_status CHECK (market_status IN ('risk_on', 'risk_off', 'neutral'))
+    CONSTRAINT valid_market_condition CHECK (market_condition IN ('risk_on', 'risk_off', 'neutral')),
+    CONSTRAINT valid_vix_signal CHECK (vix_signal IN ('bullish', 'neutral', 'bearish')),
+    CONSTRAINT valid_rsi_signal CHECK (sp500_rsi_signal IN ('bullish', 'neutral', 'bearish')),
+    CONSTRAINT valid_pc_signal CHECK (put_call_signal IN ('bullish', 'neutral', 'bearish'))
 );
 
 -- インデックス
@@ -210,10 +212,19 @@ CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
 │ id (PK)             │
 │ recorded_at         │
 │ vix                 │
-│ put_call_ratio      │
+│ vix_signal          │
+│ sp500_price         │
 │ sp500_rsi           │
-│ market_status       │
-│ ...                 │
+│ sp500_rsi_signal    │
+│ sp500_ma200         │
+│ sp500_above_ma200   │
+│ put_call_ratio      │
+│ put_call_signal     │
+│ market_condition    │
+│ confidence          │
+│ score               │
+│ recommendation      │
+│ created_at          │
 └─────────────────────┘
 
 ┌─────────────────────┐

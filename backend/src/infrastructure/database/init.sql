@@ -12,46 +12,49 @@ CREATE TABLE market_snapshots (
     recorded_at TIMESTAMP NOT NULL,
 
     -- VIX関連
-    vix DECIMAL(10,2),
-    vix_change DECIMAL(10,2),
-
-    -- Put/Call Ratio
-    put_call_ratio DECIMAL(10,4),
-
-    -- 騰落レシオ
-    advancing_issues INTEGER,
-    declining_issues INTEGER,
-    advance_decline_ratio DECIMAL(10,4),
+    vix DECIMAL(10,2) NOT NULL,
+    vix_signal VARCHAR(20) NOT NULL,
 
     -- S&P500指標
-    sp500_close DECIMAL(10,2),
-    sp500_rsi DECIMAL(10,2),
-    sp500_above_200ma BOOLEAN,
-    sp500_distance_from_200ma DECIMAL(10,2),
+    sp500_price DECIMAL(12,2) NOT NULL,
+    sp500_rsi DECIMAL(5,2) NOT NULL,
+    sp500_rsi_signal VARCHAR(20) NOT NULL,
+    sp500_ma200 DECIMAL(12,2) NOT NULL,
+    sp500_above_ma200 BOOLEAN NOT NULL,
+
+    -- Put/Call Ratio
+    put_call_ratio DECIMAL(6,4) NOT NULL,
+    put_call_signal VARCHAR(20) NOT NULL,
 
     -- 判定結果
-    market_status VARCHAR(20) NOT NULL,
-    confidence DECIMAL(5,2),
+    market_condition VARCHAR(20) NOT NULL,
+    confidence DECIMAL(5,4) NOT NULL,
+    score INTEGER NOT NULL,
+    recommendation VARCHAR(500) NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT valid_market_status CHECK (market_status IN ('risk_on', 'risk_off', 'neutral'))
+    CONSTRAINT valid_market_condition CHECK (market_condition IN ('risk_on', 'risk_off', 'neutral')),
+    CONSTRAINT valid_vix_signal CHECK (vix_signal IN ('bullish', 'neutral', 'bearish')),
+    CONSTRAINT valid_rsi_signal CHECK (sp500_rsi_signal IN ('bullish', 'neutral', 'bearish')),
+    CONSTRAINT valid_pc_signal CHECK (put_call_signal IN ('bullish', 'neutral', 'bearish'))
 );
 
-COMMENT ON TABLE market_snapshots IS 'マーケット状態の日次スナップショット';
+COMMENT ON TABLE market_snapshots IS 'マーケット状態の履歴スナップショット（1時間ごと）';
 COMMENT ON COLUMN market_snapshots.recorded_at IS 'スナップショット取得日時';
 COMMENT ON COLUMN market_snapshots.vix IS 'VIX指数（恐怖指数）';
-COMMENT ON COLUMN market_snapshots.vix_change IS 'VIX前日比';
-COMMENT ON COLUMN market_snapshots.put_call_ratio IS 'Put/Call Ratio（1.0超で弱気優勢）';
-COMMENT ON COLUMN market_snapshots.advancing_issues IS '上昇銘柄数';
-COMMENT ON COLUMN market_snapshots.declining_issues IS '下落銘柄数';
-COMMENT ON COLUMN market_snapshots.advance_decline_ratio IS '騰落レシオ（上昇/下落）';
-COMMENT ON COLUMN market_snapshots.sp500_close IS 'S&P500終値';
+COMMENT ON COLUMN market_snapshots.vix_signal IS 'VIXシグナル: bullish/neutral/bearish';
+COMMENT ON COLUMN market_snapshots.sp500_price IS 'S&P500現在価格';
 COMMENT ON COLUMN market_snapshots.sp500_rsi IS 'S&P500のRSI（14日）';
-COMMENT ON COLUMN market_snapshots.sp500_above_200ma IS 'S&P500が200日移動平均線より上か';
-COMMENT ON COLUMN market_snapshots.sp500_distance_from_200ma IS '200MAからの乖離率（%）';
-COMMENT ON COLUMN market_snapshots.market_status IS '判定結果: risk_on/risk_off/neutral';
+COMMENT ON COLUMN market_snapshots.sp500_rsi_signal IS 'RSIシグナル: bullish/neutral/bearish';
+COMMENT ON COLUMN market_snapshots.sp500_ma200 IS 'S&P500の200日移動平均';
+COMMENT ON COLUMN market_snapshots.sp500_above_ma200 IS 'S&P500が200日移動平均線より上か';
+COMMENT ON COLUMN market_snapshots.put_call_ratio IS 'Put/Call Ratio';
+COMMENT ON COLUMN market_snapshots.put_call_signal IS 'Put/Call Ratioシグナル: bullish/neutral/bearish';
+COMMENT ON COLUMN market_snapshots.market_condition IS '判定結果: risk_on/risk_off/neutral';
 COMMENT ON COLUMN market_snapshots.confidence IS '判定の確信度（0.0-1.0）';
+COMMENT ON COLUMN market_snapshots.score IS '総合スコア（-5〜+5）';
+COMMENT ON COLUMN market_snapshots.recommendation IS '推奨アクション';
 
 CREATE INDEX idx_market_snapshots_recorded_at ON market_snapshots(recorded_at DESC);
 
