@@ -86,6 +86,38 @@ export const DEFAULT_SCREENER_FILTER: ScreenerFilter = {
   min_canslim_score: 70,
 };
 
+/** 株価履歴バー */
+export interface PriceBar {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/** 株価履歴レスポンス */
+export interface PriceHistoryResponse {
+  symbol: string;
+  period: string;
+  interval: string;
+  data: PriceBar[];
+}
+
+/** 財務指標レスポンス */
+export interface FinancialsResponse {
+  symbol: string;
+  eps_ttm: number | null;
+  eps_growth_quarterly: number | null;
+  eps_growth_annual: number | null;
+  revenue_growth: number | null;
+  profit_margin: number | null;
+  roe: number | null;
+  debt_to_equity: number | null;
+  institutional_ownership: number | null;
+  retrieved_at: string;
+}
+
 /** ソートキー */
 export type SortKey =
   | "symbol"

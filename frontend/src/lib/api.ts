@@ -4,7 +4,13 @@
 
 import type { ApiResponse, HealthResponse } from "@/types/api";
 import type { MarketStatusResponse, MarketIndicatorsResponse } from "@/types/market";
-import type { ScreenerResponse, ScreenerFilter, StockDetail } from "@/types/stock";
+import type {
+  ScreenerResponse,
+  ScreenerFilter,
+  StockDetail,
+  PriceHistoryResponse,
+  FinancialsResponse,
+} from "@/types/stock";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -94,4 +100,48 @@ export async function getStockDetail(symbol: string): Promise<ApiResponse<StockD
   return fetchApi<ApiResponse<StockDetail>>(`/screener/stock/${symbol}`, {
     cache: "no-store",
   });
+}
+
+/**
+ * 株価履歴取得API
+ */
+export async function getPriceHistory(
+  symbol: string,
+  period: string = "1y",
+  interval: string = "1d"
+): Promise<ApiResponse<PriceHistoryResponse>> {
+  const params = new URLSearchParams({ period, interval });
+  return fetchApi<ApiResponse<PriceHistoryResponse>>(
+    `/data/history/${symbol}?${params.toString()}`,
+    { cache: "no-store" }
+  );
+}
+
+/**
+ * 財務指標取得API
+ */
+export async function getFinancials(
+  symbol: string
+): Promise<ApiResponse<FinancialsResponse>> {
+  return fetchApi<ApiResponse<FinancialsResponse>>(`/data/financials/${symbol}`, {
+    cache: "no-store",
+  });
+}
+
+/**
+ * 株価クォート取得API
+ */
+export async function getQuote(symbol: string): Promise<ApiResponse<{
+  symbol: string;
+  price: number;
+  change: number;
+  change_percent: number;
+  volume: number;
+  market_cap: number | null;
+  pe_ratio: number | null;
+  week_52_high: number;
+  week_52_low: number;
+  timestamp: string;
+}>> {
+  return fetchApi(`/data/quote/${symbol}`, { cache: "no-store" });
 }

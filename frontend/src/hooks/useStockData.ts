@@ -1,0 +1,92 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { getQuote, getPriceHistory, getFinancials } from "@/lib/api";
+import type { PriceBar, FinancialsResponse } from "@/types/stock";
+
+/** 株価クォートデータ */
+export interface QuoteData {
+  symbol: string;
+  price: number;
+  change: number;
+  change_percent: number;
+  volume: number;
+  market_cap: number | null;
+  pe_ratio: number | null;
+  week_52_high: number;
+  week_52_low: number;
+  timestamp: string;
+}
+
+/** useStockDataの戻り値 */
+export interface UseStockDataResult {
+  quote: QuoteData | null;
+  priceHistory: PriceBar[];
+  financials: FinancialsResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * 銘柄データ取得フック
+ *
+ * 株価クォート、価格履歴、財務データを並列取得する
+ */
+export function useStockData(
+  symbol: string,
+  period: string = "1y"
+): UseStockDataResult {
+  const [quote, setQuote] = useState<QuoteData | null>(null);
+  const [priceHistory, setPriceHistory] = useState<PriceBar[]>([]);
+  const [financials, setFinancials] = useState<FinancialsResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!symbol) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // 並列でデータ取得
+      const [quoteRes, historyRes, financialsRes] = await Promise.all([
+        getQuote(symbol),
+        getPriceHistory(symbol, period, "1d"),
+        getFinancials(symbol).catch(() => null), // 財務データは取得失敗しても続行
+      ]);
+
+      if (quoteRes.success && quoteRes.data) {
+        setQuote(quoteRes.data);
+      } else {
+        throw new Error("Failed to fetch quote data");
+      }
+
+      if (historyRes.success && historyRes.data) {
+        setPriceHistory(historyRes.data.data);
+      }
+
+      if (financialsRes?.success && financialsRes.data) {
+        setFinancials(financialsRes.data);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch stock data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [symbol, period]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return {
+    quote,
+    priceHistory,
+    financials,
+    isLoading,
+    error,
+    refetch: fetchData,
+  };
+}
