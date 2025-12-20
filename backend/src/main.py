@@ -4,7 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import get_settings
-from src.presentation.api import data_controller, health_controller, market_controller
+from src.presentation.api import (
+    data_controller,
+    health_controller,
+    market_controller,
+    screener_controller,
+)
 
 settings = get_settings()
 
@@ -31,6 +36,7 @@ app.add_middleware(
 app.include_router(health_controller.router, prefix=settings.api_prefix)
 app.include_router(data_controller.router, prefix=settings.api_prefix)
 app.include_router(market_controller.router, prefix=settings.api_prefix)
+app.include_router(screener_controller.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

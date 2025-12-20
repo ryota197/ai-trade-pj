@@ -216,6 +216,16 @@ frontend/src/
 
 ---
 
+---
+
+## 補足ドキュメント
+
+| ドキュメント | 内容 |
+|-------------|------|
+| [phase3-admin-refresh.md](./phase3-admin-refresh.md) | 管理者向けデータ更新機能（進捗表示付き） |
+
+---
+
 ## 次のフェーズへ
 
 Phase 3 完了後 → [Phase 4: Portfolio Module](./phase4-portfolio.md)

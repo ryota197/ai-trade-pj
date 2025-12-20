@@ -1,11 +1,14 @@
 """データ取得API"""
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Query
 
 from src.domain.entities.quote import HistoricalPrice, Quote
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
 from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.quote import (
+    FinancialsResponse,
     HistoryItem,
     HistoryResponse,
     QuoteResponse,
@@ -67,7 +70,7 @@ def _history_to_response(
 def get_quote(symbol: str) -> ApiResponse[QuoteResponse]:
     """株価データを取得"""
     try:
-        quote = gateway.get_quote(symbol)
+        quote = gateway.get_quote_sync(symbol)
         return ApiResponse(
             success=True,
             data=_quote_to_response(quote),
@@ -91,7 +94,7 @@ def get_history(
 ) -> ApiResponse[HistoryResponse]:
     """過去の株価データを取得"""
     try:
-        history = gateway.get_history(symbol, period=period, interval=interval)
+        history = gateway.get_history_sync(symbol, period=period, interval=interval)
         return ApiResponse(
             success=True,
             data=_history_to_response(symbol, period, interval, history),
@@ -100,3 +103,44 @@ def get_history(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {e}")
+
+
+@router.get(
+    "/financials/{symbol}",
+    response_model=ApiResponse[FinancialsResponse],
+    summary="財務指標取得",
+    description="指定したシンボルの財務指標（EPS成長率、ROE等）を取得する",
+)
+async def get_financials(symbol: str) -> ApiResponse[FinancialsResponse]:
+    """財務指標を取得"""
+    try:
+        metrics = await gateway.get_financial_metrics(symbol)
+
+        if metrics is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Financial data not found: {symbol}",
+            )
+
+        response = FinancialsResponse(
+            symbol=metrics.symbol,
+            eps_ttm=metrics.eps_ttm,
+            eps_growth_quarterly=metrics.eps_growth_quarterly,
+            eps_growth_annual=metrics.eps_growth_annual,
+            revenue_growth=metrics.revenue_growth,
+            profit_margin=metrics.profit_margin,
+            roe=metrics.roe,
+            debt_to_equity=metrics.debt_to_equity,
+            institutional_ownership=metrics.institutional_ownership,
+            retrieved_at=datetime.now(),
+        )
+
+        return ApiResponse(success=True, data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch financials: {e}",
+        )

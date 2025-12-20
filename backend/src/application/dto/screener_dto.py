@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.domain.constants import CANSLIMThresholds
+
 
 # ============================================================
 # 入力DTO
@@ -13,17 +15,17 @@ from datetime import datetime
 class ScreenerFilterInput:
     """スクリーニングフィルター 入力DTO"""
 
-    min_rs_rating: int = 80
-    min_eps_growth_quarterly: float = 25.0
-    min_eps_growth_annual: float = 25.0
-    max_distance_from_52w_high: float = 15.0
-    min_volume_ratio: float = 1.5
-    min_canslim_score: int = 70
+    min_rs_rating: int = CANSLIMThresholds.MIN_RS_RATING
+    min_eps_growth_quarterly: float = CANSLIMThresholds.MIN_EPS_GROWTH_QUARTERLY
+    min_eps_growth_annual: float = CANSLIMThresholds.MIN_EPS_GROWTH_ANNUAL
+    max_distance_from_52w_high: float = CANSLIMThresholds.MAX_DISTANCE_FROM_52W_HIGH
+    min_volume_ratio: float = CANSLIMThresholds.MIN_VOLUME_RATIO
+    min_canslim_score: int = CANSLIMThresholds.MIN_CANSLIM_SCORE
     min_market_cap: float | None = None
     max_market_cap: float | None = None
     symbols: list[str] | None = None
-    limit: int = 20
-    offset: int = 0
+    limit: int = CANSLIMThresholds.DEFAULT_LIMIT
+    offset: int = CANSLIMThresholds.DEFAULT_OFFSET
 
 
 @dataclass(frozen=True)
