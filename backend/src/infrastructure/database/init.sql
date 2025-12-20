@@ -64,59 +64,61 @@ CREATE INDEX idx_market_snapshots_recorded_at ON market_snapshots(recorded_at DE
 CREATE TABLE screener_results (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
-    screened_at TIMESTAMP NOT NULL,
 
     -- 銘柄基本情報
-    name VARCHAR(100),
-    industry VARCHAR(50),
-    market_cap BIGINT,
+    name VARCHAR(200) NOT NULL,
 
     -- 株価情報
-    price DECIMAL(10,2),
-    change_percent DECIMAL(10,2),
-    volume BIGINT,
-    avg_volume_50d BIGINT,
+    price DECIMAL(12,2) NOT NULL,
+    change_percent DECIMAL(8,2) NOT NULL,
+    volume INTEGER NOT NULL,
+    avg_volume INTEGER NOT NULL,
+    market_cap DECIMAL(20,2),
+    pe_ratio DECIMAL(10,2),
+    week_52_high DECIMAL(12,2) NOT NULL,
+    week_52_low DECIMAL(12,2) NOT NULL,
 
     -- CAN-SLIM指標
-    eps_growth_q DECIMAL(10,2),
-    eps_growth_y DECIMAL(10,2),
-    distance_from_high DECIMAL(10,2),
-    volume_ratio DECIMAL(10,2),
-    rs_rating DECIMAL(10,2),
-    institutional_holding DECIMAL(10,2),
+    eps_growth_quarterly DECIMAL(8,2),
+    eps_growth_annual DECIMAL(8,2),
+    rs_rating INTEGER NOT NULL,
+    institutional_ownership DECIMAL(6,2),
 
-    -- 判定結果
-    passes_canslim BOOLEAN DEFAULT FALSE,
-    canslim_score INTEGER,
+    -- CAN-SLIMスコア
+    canslim_total_score INTEGER NOT NULL,
+    canslim_detail TEXT,
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- メタデータ
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT unique_symbol_screened UNIQUE (symbol, screened_at)
+    CONSTRAINT unique_screener_symbol UNIQUE (symbol)
 );
 
-COMMENT ON TABLE screener_results IS 'CAN-SLIMスクリーニング結果のキャッシュ（30日保持）';
+COMMENT ON TABLE screener_results IS 'CAN-SLIMスクリーニング結果のキャッシュ';
 COMMENT ON COLUMN screener_results.symbol IS 'ティッカーシンボル（例: AAPL）';
-COMMENT ON COLUMN screener_results.screened_at IS 'スクリーニング実行日時';
 COMMENT ON COLUMN screener_results.name IS '企業名';
-COMMENT ON COLUMN screener_results.industry IS '業種';
-COMMENT ON COLUMN screener_results.market_cap IS '時価総額（USD）';
 COMMENT ON COLUMN screener_results.price IS '株価';
 COMMENT ON COLUMN screener_results.change_percent IS '前日比変動率（%）';
 COMMENT ON COLUMN screener_results.volume IS '出来高';
-COMMENT ON COLUMN screener_results.avg_volume_50d IS '50日平均出来高';
-COMMENT ON COLUMN screener_results.eps_growth_q IS 'C: 四半期EPS成長率（%）';
-COMMENT ON COLUMN screener_results.eps_growth_y IS 'A: 年間EPS成長率（%）';
-COMMENT ON COLUMN screener_results.distance_from_high IS 'N: 52週高値からの乖離率（%、負値）';
-COMMENT ON COLUMN screener_results.volume_ratio IS 'S: 出来高倍率（当日/50日平均）';
-COMMENT ON COLUMN screener_results.rs_rating IS 'L: 相対力評価（0-99）';
-COMMENT ON COLUMN screener_results.institutional_holding IS 'I: 機関投資家保有率（%）';
-COMMENT ON COLUMN screener_results.passes_canslim IS 'CAN-SLIM条件を満たすか';
-COMMENT ON COLUMN screener_results.canslim_score IS '総合スコア（0-100）';
+COMMENT ON COLUMN screener_results.avg_volume IS '平均出来高';
+COMMENT ON COLUMN screener_results.market_cap IS '時価総額（USD）';
+COMMENT ON COLUMN screener_results.pe_ratio IS 'PER';
+COMMENT ON COLUMN screener_results.week_52_high IS '52週高値';
+COMMENT ON COLUMN screener_results.week_52_low IS '52週安値';
+COMMENT ON COLUMN screener_results.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
+COMMENT ON COLUMN screener_results.eps_growth_annual IS 'A: 年間EPS成長率（%）';
+COMMENT ON COLUMN screener_results.rs_rating IS 'L: RS Rating（1-99）';
+COMMENT ON COLUMN screener_results.institutional_ownership IS 'I: 機関投資家保有率（%）';
+COMMENT ON COLUMN screener_results.canslim_total_score IS 'CAN-SLIMスコア（0-100）';
+COMMENT ON COLUMN screener_results.canslim_detail IS 'CAN-SLIMスコア詳細（JSON）';
+COMMENT ON COLUMN screener_results.updated_at IS '最終更新日時';
+COMMENT ON COLUMN screener_results.created_at IS '作成日時';
 
 CREATE INDEX idx_screener_results_symbol ON screener_results(symbol);
-CREATE INDEX idx_screener_results_screened_at ON screener_results(screened_at DESC);
-CREATE INDEX idx_screener_results_passes ON screener_results(passes_canslim, screened_at DESC);
 CREATE INDEX idx_screener_results_rs_rating ON screener_results(rs_rating DESC);
+CREATE INDEX idx_screener_results_canslim_score ON screener_results(canslim_total_score DESC);
+CREATE INDEX idx_screener_results_updated_at ON screener_results(updated_at DESC);
 
 -- =====================================================
 -- watchlist: ウォッチリスト
