@@ -131,10 +131,8 @@ backend/
 │   │   │
 │   │   └── gateways/            # 外部API連携（ゲートウェイ実装）
 │   │       ├── __init__.py
-│   │       ├── yfinance_market_data_gateway.py
-│   │       ├── yfinance_price_gateway.py
-│   │       ├── fmp_financial_gateway.py
-│   │       └── sec_edgar_gateway.py
+│   │       ├── yfinance_gateway.py           # 株価・財務データ（統合版）
+│   │       └── yfinance_market_data_gateway.py  # マーケット指標（VIX, RSI等）
 │   │
 │   └── presentation/            # プレゼンテーション層
 │       ├── __init__.py
@@ -393,6 +391,6 @@ htmlcov/
 | Use Case | `{動詞}_{名詞}.py` | `get_market_status.py`, `screen_canslim_stocks.py` |
 | Gateway Interface | `{名詞}_gateway.py` | `financial_data_gateway.py` |
 | Repository Impl | `postgres_{名詞}_repository.py` | `postgres_stock_repository.py` |
-| Gateway Impl | `{provider}_{名詞}_gateway.py` | `yfinance_market_data_gateway.py` |
+| Gateway Impl | `{provider}_{名詞}_gateway.py` | `yfinance_gateway.py`, `yfinance_market_data_gateway.py` |
 | Controller | `{名詞}_controller.py` | `market_controller.py` |
 | Schema | `{名詞}.py` | `market.py`, `screener.py` |

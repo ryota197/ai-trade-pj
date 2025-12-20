@@ -5,4 +5,7 @@ from src.infrastructure.gateways.yfinance_market_data_gateway import (
     YFinanceMarketDataGateway,
 )
 
-__all__ = ["YFinanceGateway", "YFinanceMarketDataGateway"]
+__all__ = [
+    "YFinanceGateway",
+    "YFinanceMarketDataGateway",
+]

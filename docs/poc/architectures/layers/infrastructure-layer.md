@@ -72,62 +72,191 @@ class PostgresStockRepository(StockRepository):
 
 ### Gateway Implementations（ゲートウェイ実装）
 
+#### ゲートウェイ設計方針
+
+| ゲートウェイ | 責務 | 実装するインターフェース |
+|------------|------|------------------------|
+| `YFinanceGateway` | 株価・財務データ取得（統合版） | `FinancialDataGateway` |
+| `YFinanceMarketDataGateway` | マーケット指標取得（VIX, RSI等） | `MarketDataRepository` |
+
+> **Note**: 当初 `YFinanceGateway`（汎用）と `YFinancePriceGateway`（スクリーナー用）が
+> 別々に存在したが、機能重複を解消するため `YFinanceGateway` に統合。
+> `FinancialDataGateway` インターフェースを実装し、非同期メソッドで統一。
+
 ```python
-# infrastructure/gateways/yfinance_market_data_gateway.py
+# infrastructure/gateways/yfinance_gateway.py
 import yfinance as yf
-from datetime import date
-from domain.repositories.market_data_repository import MarketDataRepository
+from datetime import datetime
+from application.interfaces.financial_data_gateway import (
+    FinancialDataGateway,
+    FinancialMetrics,
+    HistoricalBar,
+    QuoteData,
+)
 
-class YFinanceMarketDataGateway(MarketDataRepository):
-    """yfinanceによる市場データ取得実装"""
+class YFinanceGateway(FinancialDataGateway):
+    """
+    yfinance を使用した財務データゲートウェイ（統合版）
 
-    async def get_vix(self) -> float:
-        ticker = yf.Ticker("^VIX")
-        return ticker.info.get("regularMarketPrice", 0)
+    FinancialDataGateway インターフェースを実装し、
+    株価・財務データを一元的に取得する。
+    """
 
-    async def get_sp500_price(self) -> float:
-        ticker = yf.Ticker("^GSPC")
-        return ticker.info.get("regularMarketPrice", 0)
+    SP500_SYMBOL = "SPY"
+
+    async def get_quote(self, symbol: str) -> QuoteData | None:
+        """現在の株価データを取得"""
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            if not info or info.get("regularMarketPrice") is None:
+                return None
+
+            price = info.get("regularMarketPrice", 0)
+            previous_close = info.get("previousClose", price)
+            change = price - previous_close
+
+            return QuoteData(
+                symbol=symbol.upper(),
+                price=price,
+                change=round(change, 2),
+                change_percent=round((change / previous_close * 100), 2),
+                volume=info.get("regularMarketVolume", 0),
+                avg_volume=info.get("averageVolume", 0),
+                market_cap=info.get("marketCap"),
+                pe_ratio=info.get("trailingPE"),
+                week_52_high=info.get("fiftyTwoWeekHigh", 0),
+                week_52_low=info.get("fiftyTwoWeekLow", 0),
+                timestamp=datetime.now(),
+            )
+        except Exception:
+            return None
+
+    async def get_quotes(self, symbols: list[str]) -> dict[str, QuoteData]:
+        """複数銘柄の株価データを一括取得"""
+        result = {}
+        for symbol in symbols:
+            quote = await self.get_quote(symbol)
+            if quote:
+                result[symbol] = quote
+        return result
 
     async def get_price_history(
-        self, symbol: str, start_date: date, end_date: date
-    ) -> list[dict]:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(start=start_date, end=end_date)
-        return df.reset_index().to_dict(orient="records")
+        self, symbol: str, period: str = "1y", interval: str = "1d"
+    ) -> list[HistoricalBar]:
+        """株価履歴を取得"""
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period=period, interval=interval)
+            if hist.empty:
+                return []
+
+            return [
+                HistoricalBar(
+                    date=date.to_pydatetime(),
+                    open=round(row["Open"], 4),
+                    high=round(row["High"], 4),
+                    low=round(row["Low"], 4),
+                    close=round(row["Close"], 4),
+                    volume=int(row["Volume"]),
+                )
+                for date, row in hist.iterrows()
+            ]
+        except Exception:
+            return []
+
+    async def get_financial_metrics(self, symbol: str) -> FinancialMetrics | None:
+        """財務指標を取得（EPS成長率を自動計算）"""
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            if not info:
+                return None
+
+            return FinancialMetrics(
+                symbol=symbol.upper(),
+                eps_ttm=info.get("trailingEps"),
+                eps_growth_quarterly=self._calc_eps_growth_quarterly(ticker),
+                eps_growth_annual=self._calc_eps_growth_annual(ticker),
+                revenue_growth=self._to_percent(info.get("revenueGrowth")),
+                profit_margin=self._to_percent(info.get("profitMargins")),
+                roe=self._to_percent(info.get("returnOnEquity")),
+                debt_to_equity=info.get("debtToEquity"),
+                institutional_ownership=self._to_percent(
+                    info.get("heldPercentInstitutions")
+                ),
+            )
+        except Exception:
+            return None
+
+    async def get_sp500_history(
+        self, period: str = "1y", interval: str = "1d"
+    ) -> list[HistoricalBar]:
+        """S&P500の履歴を取得（RS Rating計算用）"""
+        return await self.get_price_history(self.SP500_SYMBOL, period, interval)
+
+    # === Private Methods ===
+
+    def _calc_eps_growth_quarterly(self, ticker) -> float | None:
+        """四半期EPS成長率を計算"""
+        try:
+            q = ticker.quarterly_earnings
+            if q is None or len(q) < 2:
+                return None
+            current = q.iloc[0]["Reported EPS"]
+            previous = q.iloc[-1]["Reported EPS"] if len(q) >= 4 else q.iloc[1]["Reported EPS"]
+            if previous == 0:
+                return None
+            return round(((current - previous) / abs(previous)) * 100, 2)
+        except Exception:
+            return None
+
+    def _calc_eps_growth_annual(self, ticker) -> float | None:
+        """年間EPS成長率を計算"""
+        try:
+            a = ticker.earnings
+            if a is None or len(a) < 2:
+                return None
+            current = a.iloc[-1]["Earnings"]
+            previous = a.iloc[-2]["Earnings"]
+            if previous == 0:
+                return None
+            return round(((current - previous) / abs(previous)) * 100, 2)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _to_percent(value: float | None) -> float | None:
+        return round(value * 100, 2) if value else None
 ```
 
 ```python
-# infrastructure/gateways/fmp_financial_gateway.py
-import httpx
-from application.interfaces.financial_data_gateway import (
-    FinancialDataGateway, FinancialData
-)
+# infrastructure/gateways/yfinance_market_data_gateway.py
+import yfinance as yf
+from domain.repositories.market_data_repository import MarketDataRepository
 
-class FMPFinancialGateway(FinancialDataGateway):
-    """Financial Modeling Prep APIによる財務データ取得実装"""
+class YFinanceMarketDataGateway(MarketDataRepository):
+    """yfinanceによる市場指標取得（VIX, S&P500 RSI等）"""
 
-    def __init__(self, api_key: str | None = None):
-        self._api_key = api_key
-        self._base_url = "https://financialmodelingprep.com/api/v3"
+    def get_vix(self) -> float:
+        ticker = yf.Ticker("^VIX")
+        return ticker.info.get("regularMarketPrice", 0)
 
-    async def get_financials(self, symbol: str) -> FinancialData:
-        async with httpx.AsyncClient() as client:
-            # API呼び出し実装
-            response = await client.get(
-                f"{self._base_url}/income-statement/{symbol}",
-                params={"apikey": self._api_key}
-            )
-            data = response.json()
-            # ... データ変換
+    def get_sp500_price(self) -> float:
+        ticker = yf.Ticker("^GSPC")
+        return ticker.info.get("regularMarketPrice", 0)
 
-        return FinancialData(
-            eps_growth_q=30.0,
-            eps_growth_y=25.0,
-            volume_ratio=1.8,
-            rs_rating=85.0,
-            institutional_holding=0.65
-        )
+    def get_sp500_rsi(self, period: int = 14) -> float:
+        # RSI計算ロジック
+        ...
+
+    def get_sp500_ma200(self) -> float:
+        # 200日移動平均計算
+        ...
+
+    def get_put_call_ratio(self) -> float:
+        # Put/Call Ratio取得
+        ...
 ```
 
 ### Database（データベース）
