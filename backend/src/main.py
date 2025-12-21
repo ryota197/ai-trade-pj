@@ -8,6 +8,7 @@ from src.presentation.api import (
     data_controller,
     health_controller,
     market_controller,
+    portfolio_controller,
     screener_controller,
 )
 
@@ -37,6 +38,7 @@ app.include_router(health_controller.router, prefix=settings.api_prefix)
 app.include_router(data_controller.router, prefix=settings.api_prefix)
 app.include_router(market_controller.router, prefix=settings.api_prefix)
 app.include_router(screener_controller.router, prefix=settings.api_prefix)
+app.include_router(portfolio_controller.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

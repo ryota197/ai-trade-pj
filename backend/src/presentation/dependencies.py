@@ -7,11 +7,18 @@ from src.application.use_cases.market import (
     GetMarketIndicatorsUseCase,
     GetMarketStatusUseCase,
 )
+from src.application.use_cases.portfolio import (
+    GetPerformanceUseCase,
+    GetTradesUseCase,
+    ManageWatchlistUseCase,
+    RecordTradeUseCase,
+)
 from src.application.use_cases.screener.get_stock_detail import GetStockDetailUseCase
 from src.application.use_cases.screener.screen_canslim_stocks import (
     ScreenCANSLIMStocksUseCase,
 )
 from src.domain.services.market_analyzer import MarketAnalyzer
+from src.domain.services.performance_calculator import PerformanceCalculator
 from src.domain.services.rs_rating_calculator import RSRatingCalculator
 from src.infrastructure.database.connection import get_db
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
@@ -20,6 +27,12 @@ from src.infrastructure.gateways.yfinance_market_data_gateway import (
 )
 from src.infrastructure.repositories.postgres_screener_repository import (
     PostgresScreenerRepository,
+)
+from src.infrastructure.repositories.postgres_trade_repository import (
+    PostgresTradeRepository,
+)
+from src.infrastructure.repositories.postgres_watchlist_repository import (
+    PostgresWatchlistRepository,
 )
 
 
@@ -89,3 +102,84 @@ def get_stock_detail_use_case(
     stock_repo = PostgresScreenerRepository(db)
 
     return GetStockDetailUseCase(stock_repository=stock_repo)
+
+
+# ============================================================
+# Portfolio Use Cases
+# ============================================================
+
+
+def get_manage_watchlist_use_case(
+    db: Session = Depends(get_db),
+) -> ManageWatchlistUseCase:
+    """
+    ManageWatchlistUseCaseの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        ManageWatchlistUseCase: ウォッチリスト管理ユースケース
+    """
+    watchlist_repo = PostgresWatchlistRepository(db)
+
+    return ManageWatchlistUseCase(watchlist_repository=watchlist_repo)
+
+
+def get_record_trade_use_case(
+    db: Session = Depends(get_db),
+) -> RecordTradeUseCase:
+    """
+    RecordTradeUseCaseの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        RecordTradeUseCase: トレード記録ユースケース
+    """
+    trade_repo = PostgresTradeRepository(db)
+
+    return RecordTradeUseCase(trade_repository=trade_repo)
+
+
+def get_trades_use_case(
+    db: Session = Depends(get_db),
+) -> GetTradesUseCase:
+    """
+    GetTradesUseCaseの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        GetTradesUseCase: トレード取得ユースケース
+    """
+    trade_repo = PostgresTradeRepository(db)
+    financial_gateway = YFinanceGateway()
+
+    return GetTradesUseCase(
+        trade_repository=trade_repo,
+        financial_gateway=financial_gateway,
+    )
+
+
+def get_performance_use_case(
+    db: Session = Depends(get_db),
+) -> GetPerformanceUseCase:
+    """
+    GetPerformanceUseCaseの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        GetPerformanceUseCase: パフォーマンス取得ユースケース
+    """
+    trade_repo = PostgresTradeRepository(db)
+    performance_calculator = PerformanceCalculator()
+
+    return GetPerformanceUseCase(
+        trade_repository=trade_repo,
+        performance_calculator=performance_calculator,
+    )
