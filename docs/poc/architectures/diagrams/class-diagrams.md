@@ -131,7 +131,25 @@ classDiagram
         +relative_strength: float
     }
 
+    class EPSGrowthCalculator {
+        +calculate(eps_data: EPSData)$ EPSGrowthResult
+        +calculate_quarterly_growth(eps_data: EPSData)$ float?
+        +calculate_annual_growth(eps_data: EPSData)$ float?
+    }
+
+    class EPSData {
+        +quarterly_eps: list~float~
+        +annual_eps: list~float~
+    }
+
+    class EPSGrowthResult {
+        +quarterly_growth: float?
+        +annual_growth: float?
+    }
+
     RSRatingCalculator --> RSRatingResult
+    EPSGrowthCalculator --> EPSData
+    EPSGrowthCalculator --> EPSGrowthResult
 ```
 
 ---
@@ -210,13 +228,32 @@ classDiagram
         +execute() MarketIndicatorsOutput
     }
 
+    class GetFinancialMetricsUseCase {
+        -_gateway: FinancialDataGateway
+        -_eps_calculator: EPSGrowthCalculator
+        +execute(symbol: str) FinancialMetrics?
+    }
+
     class FinancialDataGateway {
         <<interface>>
         +get_quote(symbol) Quote?
         +get_quotes(symbols) dict
         +get_price_history(symbol) list~HistoricalBar~
+        +get_raw_financials(symbol) RawFinancialData?
         +get_financial_metrics(symbol) FinancialMetrics?
         +get_sp500_history(period) list~HistoricalBar~
+    }
+
+    class RawFinancialData {
+        +symbol: str
+        +quarterly_eps: list~float~
+        +annual_eps: list~float~
+        +eps_ttm: float?
+        +revenue_growth: float?
+        +profit_margin: float?
+        +roe: float?
+        +debt_to_equity: float?
+        +institutional_ownership: float?
     }
 
     ScreenCANSLIMStocksUseCase --> StockRepository
@@ -226,6 +263,9 @@ classDiagram
     GetMarketStatusUseCase --> MarketDataRepository
     GetMarketStatusUseCase --> MarketAnalyzer
     GetMarketIndicatorsUseCase --> MarketDataRepository
+    GetFinancialMetricsUseCase --> FinancialDataGateway
+    GetFinancialMetricsUseCase --> EPSGrowthCalculator
+    FinancialDataGateway --> RawFinancialData
 ```
 
 ---

@@ -154,6 +154,50 @@ sequenceDiagram
 
 ---
 
+## 5. 財務指標取得（リファクタリング後）
+
+`/data/financials/{symbol}` エンドポイントでEPS成長率を含む財務指標を取得するフロー。
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant StockPage as /stock/[symbol]
+    participant useStockData
+    participant API as api.ts
+    participant Controller as data_controller
+    participant UseCase as GetFinancialMetricsUseCase
+    participant Gateway as YFinanceGateway
+    participant Calculator as EPSGrowthCalculator
+    participant YFinance as yfinance
+
+    Browser->>StockPage: /stock/AAPL アクセス
+    StockPage->>useStockData: useStockData("AAPL")
+    useStockData->>API: getFinancials("AAPL")
+    API->>Controller: GET /api/data/financials/AAPL
+    Controller->>UseCase: execute("AAPL")
+
+    Note over UseCase: 1. 生データ取得（Infrastructure層）
+    UseCase->>Gateway: get_raw_financials("AAPL")
+    Gateway->>YFinance: ticker.quarterly_earnings
+    YFinance-->>Gateway: quarterly EPS data
+    Gateway->>YFinance: ticker.earnings
+    YFinance-->>Gateway: annual EPS data
+    Gateway-->>UseCase: RawFinancialData
+
+    Note over UseCase: 2. EPS成長率計算（Domain層）
+    UseCase->>Calculator: calculate(EPSData)
+    Calculator-->>UseCase: EPSGrowthResult
+
+    Note over UseCase: 3. DTO構築
+    UseCase-->>Controller: FinancialMetrics
+    Controller-->>API: ApiResponse
+    API-->>useStockData: financials
+    useStockData-->>StockPage: { financials }
+    StockPage-->>Browser: 財務指標表示
+```
+
+---
+
 ## API エンドポイント対応表
 
 | 機能 | エンドポイント | データフロー |
@@ -162,6 +206,6 @@ sequenceDiagram
 | 銘柄詳細 | `GET /api/screener/stock/{symbol}` | Controller → UseCase → Repository |
 | 株価取得 | `GET /api/data/quote/{symbol}` | Controller → Gateway → yfinance |
 | 株価履歴 | `GET /api/data/history/{symbol}` | Controller → Gateway → yfinance |
-| 財務指標 | `GET /api/data/financials/{symbol}` | Controller → Gateway → yfinance |
+| 財務指標 | `GET /api/data/financials/{symbol}` | Controller → UseCase → Gateway → Calculator |
 | マーケット状態 | `GET /api/market/status` | Controller → UseCase → Gateway → Analyzer |
 | マーケット指標 | `GET /api/market/indicators` | Controller → UseCase → Gateway |

@@ -1,8 +1,9 @@
 # Gateway責務分離 リファクタリング計画
 
-## ステータス: 検討中
+## ステータス: 完了 ✅
 
 作成日: 2024-12-20
+完了日: 2024-12-21
 
 ---
 
@@ -243,6 +244,63 @@ class FinancialDataGateway(ABC):
 1. 現状で機能要件を満たしている
 2. パフォーマンス問題がない
 3. コードの理解が困難でない
+
+---
+
+## 実装完了サマリー
+
+### 実装した内容
+
+| 優先度 | アクション | 状態 | 備考 |
+|--------|-----------|------|------|
+| **高** | EPSGrowthCalculator作成 | ✅ 完了 | `domain/services/eps_growth_calculator.py` |
+| **中** | YFinanceGatewayからEPS計算削除 | ✅ 完了 | `get_raw_financials()` を追加、`get_financial_metrics()` は内部で委譲 |
+| **中** | GetFinancialMetricsUseCase作成 | ✅ 完了 | `application/use_cases/data/get_financial_metrics.py` |
+| **低** | インターフェース分離 | 保留 | 現状で機能する |
+| **低** | レガシーメソッド削除 | 保留 | 後方互換性のため維持 |
+
+### 新規作成ファイル
+
+```
+backend/src/
+├── domain/services/
+│   └── eps_growth_calculator.py      # EPSGrowthCalculator, EPSData, EPSGrowthResult
+├── application/
+│   ├── interfaces/
+│   │   └── financial_data_gateway.py  # RawFinancialData 追加
+│   └── use_cases/data/
+│       ├── __init__.py
+│       └── get_financial_metrics.py   # GetFinancialMetricsUseCase
+```
+
+### 変更ファイル
+
+```
+backend/src/
+├── infrastructure/gateways/
+│   └── yfinance_gateway.py            # get_raw_financials() 追加、EPS計算をCalculatorに委譲
+├── presentation/api/
+│   └── data_controller.py             # UseCase経由でFinancialMetrics取得
+├── domain/services/__init__.py        # EPSGrowthCalculator エクスポート
+├── application/interfaces/__init__.py # RawFinancialData エクスポート
+└── application/use_cases/__init__.py  # GetFinancialMetricsUseCase エクスポート
+```
+
+### アーキテクチャ変更
+
+```
+Before:
+Controller → Gateway.get_financial_metrics() [EPS計算含む]
+
+After:
+Controller → UseCase.execute()
+               ↓
+         Gateway.get_raw_financials() [生データのみ]
+               ↓
+         EPSGrowthCalculator.calculate() [Domain層で計算]
+               ↓
+         FinancialMetrics DTO
+```
 
 ---
 

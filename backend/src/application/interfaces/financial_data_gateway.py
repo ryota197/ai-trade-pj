@@ -35,8 +35,28 @@ class HistoricalBar:
 
 
 @dataclass(frozen=True)
+class RawFinancialData:
+    """
+    財務生データ
+
+    Gatewayから取得した加工前の財務データ。
+    EPS成長率などの計算はDomain層のCalculatorで行う。
+    """
+
+    symbol: str
+    quarterly_eps: list[float]  # 四半期EPS（新しい順）
+    annual_eps: list[float]  # 年間EPS（新しい順）
+    eps_ttm: float | None  # 直近12ヶ月EPS
+    revenue_growth: float | None  # 売上成長率（%）
+    profit_margin: float | None  # 利益率（%）
+    roe: float | None  # 自己資本利益率（%）
+    debt_to_equity: float | None  # 負債資本比率
+    institutional_ownership: float | None  # 機関投資家保有率（%）
+
+
+@dataclass(frozen=True)
 class FinancialMetrics:
-    """財務指標"""
+    """財務指標（計算済み）"""
 
     symbol: str
     eps_ttm: float | None  # 直近12ヶ月EPS
@@ -104,15 +124,35 @@ class FinancialDataGateway(ABC):
         pass
 
     @abstractmethod
+    async def get_raw_financials(self, symbol: str) -> RawFinancialData | None:
+        """
+        財務生データを取得
+
+        EPS計算などのビジネスロジックは含まず、
+        外部APIから取得した生データのみを返す。
+
+        Args:
+            symbol: ティッカーシンボル
+
+        Returns:
+            RawFinancialData: 財務生データ、取得失敗時はNone
+        """
+        pass
+
+    @abstractmethod
     async def get_financial_metrics(self, symbol: str) -> FinancialMetrics | None:
         """
-        財務指標を取得
+        財務指標を取得（計算済み）
 
         Args:
             symbol: ティッカーシンボル
 
         Returns:
             FinancialMetrics: 財務指標、取得失敗時はNone
+
+        Deprecated:
+            このメソッドはInfrastructure層でEPS計算を行うため非推奨。
+            get_raw_financials() + EPSGrowthCalculator を使用してください。
         """
         pass
 

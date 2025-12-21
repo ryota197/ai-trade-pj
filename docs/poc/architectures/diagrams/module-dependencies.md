@@ -68,6 +68,7 @@ graph TB
         A2[GetStockDetailUseCase]
         A3[GetMarketStatusUseCase]
         A4[GetMarketIndicatorsUseCase]
+        A5[GetFinancialMetricsUseCase]
     end
 
     subgraph "Domain Layer"
@@ -77,6 +78,7 @@ graph TB
         D3[CANSLIMScore VO]
         D5[MarketAnalyzer Service]
         D6[RSRatingCalculator Service]
+        D7[EPSGrowthCalculator Service]
     end
 
     subgraph "Infrastructure Layer"
@@ -86,10 +88,12 @@ graph TB
         I4[YFinanceMarketDataGateway]
     end
 
-    P1 & P2 & P3 --> A1 & A2 & A3 & A4
+    P1 & P2 & P3 --> A1 & A2 & A3 & A4 & A5
     A1 & A2 & A3 & A4 --> D1 & D2 & D5 & D6
+    A5 --> D7
     A1 & A2 --> I1
     A3 & A4 --> I4
+    A5 --> I3
     I1 --> External_DB[(PostgreSQL)]
     I3 & I4 --> External_API[yfinance]
 ```
@@ -112,6 +116,7 @@ graph LR
         detail_uc[GetStockDetailUseCase]
         status_uc[GetMarketStatusUseCase]
         indicators_uc[GetMarketIndicatorsUseCase]
+        financials_uc[GetFinancialMetricsUseCase]
     end
 
     subgraph "Domain"
@@ -120,6 +125,7 @@ graph LR
         canslim[CANSLIMScore]
         analyzer[MarketAnalyzer]
         rs_calc[RSRatingCalculator]
+        eps_calc[EPSGrowthCalculator]
         stock_repo_if[StockRepository IF]
         market_repo_if[MarketDataRepository IF]
     end
@@ -135,13 +141,15 @@ graph LR
     screener_ctrl --> detail_uc
     market_ctrl --> status_uc
     market_ctrl --> indicators_uc
-    deps --> screen_uc & detail_uc & status_uc & indicators_uc
+    data_ctrl --> financials_uc
+    deps --> screen_uc & detail_uc & status_uc & indicators_uc & financials_uc
 
     %% Application → Domain
     screen_uc --> stock & canslim & rs_calc & stock_repo_if
     detail_uc --> stock & stock_repo_if
     status_uc --> market_status & analyzer & market_repo_if
     indicators_uc --> market_repo_if
+    financials_uc --> eps_calc
 
     %% Infrastructure implements Domain interfaces
     pg_screener -.->|implements| stock_repo_if
@@ -150,6 +158,7 @@ graph LR
     %% Application → Infrastructure (via DI)
     screen_uc -.->|DI| pg_screener & yf_gateway
     status_uc -.->|DI| yf_market
+    financials_uc -.->|DI| yf_gateway
 ```
 
 ---

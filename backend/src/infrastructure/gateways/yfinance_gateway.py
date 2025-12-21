@@ -9,8 +9,10 @@ from src.application.interfaces.financial_data_gateway import (
     FinancialMetrics,
     HistoricalBar,
     QuoteData,
+    RawFinancialData,
 )
 from src.domain.entities.quote import HistoricalPrice, Quote
+from src.domain.services.eps_growth_calculator import EPSData, EPSGrowthCalculator
 
 
 class YFinanceGateway(FinancialDataGateway):
@@ -132,15 +134,18 @@ class YFinanceGateway(FinancialDataGateway):
         except Exception:
             return []
 
-    async def get_financial_metrics(self, symbol: str) -> FinancialMetrics | None:
+    async def get_raw_financials(self, symbol: str) -> RawFinancialData | None:
         """
-        財務指標を取得
+        財務生データを取得
+
+        EPS計算などのビジネスロジックは含まず、
+        yfinance から取得した生データのみを返す。
 
         Args:
             symbol: ティッカーシンボル
 
         Returns:
-            FinancialMetrics: 財務指標、取得失敗時はNone
+            RawFinancialData: 財務生データ、取得失敗時はNone
         """
         try:
             ticker = yf.Ticker(symbol)
@@ -149,15 +154,17 @@ class YFinanceGateway(FinancialDataGateway):
             if not info:
                 return None
 
-            # EPS成長率の計算
-            eps_growth_quarterly = self._calculate_eps_growth_quarterly(ticker)
-            eps_growth_annual = self._calculate_eps_growth_annual(ticker)
+            # 四半期EPSデータを取得
+            quarterly_eps = self._extract_quarterly_eps(ticker)
 
-            return FinancialMetrics(
+            # 年間EPSデータを取得
+            annual_eps = self._extract_annual_eps(ticker)
+
+            return RawFinancialData(
                 symbol=symbol.upper(),
+                quarterly_eps=quarterly_eps,
+                annual_eps=annual_eps,
                 eps_ttm=info.get("trailingEps"),
-                eps_growth_quarterly=eps_growth_quarterly,
-                eps_growth_annual=eps_growth_annual,
                 revenue_growth=self._to_percent(info.get("revenueGrowth")),
                 profit_margin=self._to_percent(info.get("profitMargins")),
                 roe=self._to_percent(info.get("returnOnEquity")),
@@ -168,6 +175,44 @@ class YFinanceGateway(FinancialDataGateway):
             )
         except Exception:
             return None
+
+    async def get_financial_metrics(self, symbol: str) -> FinancialMetrics | None:
+        """
+        財務指標を取得（計算済み）
+
+        Args:
+            symbol: ティッカーシンボル
+
+        Returns:
+            FinancialMetrics: 財務指標、取得失敗時はNone
+
+        Deprecated:
+            このメソッドはInfrastructure層でEPS計算を行うため非推奨。
+            get_raw_financials() + EPSGrowthCalculator を使用してください。
+        """
+        # 生データを取得
+        raw = await self.get_raw_financials(symbol)
+        if raw is None:
+            return None
+
+        # Domain層のCalculatorでEPS成長率を計算
+        eps_data = EPSData(
+            quarterly_eps=raw.quarterly_eps,
+            annual_eps=raw.annual_eps,
+        )
+        eps_result = EPSGrowthCalculator.calculate(eps_data)
+
+        return FinancialMetrics(
+            symbol=raw.symbol,
+            eps_ttm=raw.eps_ttm,
+            eps_growth_quarterly=eps_result.quarterly_growth,
+            eps_growth_annual=eps_result.annual_growth,
+            revenue_growth=raw.revenue_growth,
+            profit_margin=raw.profit_margin,
+            roe=raw.roe,
+            debt_to_equity=raw.debt_to_equity,
+            institutional_ownership=raw.institutional_ownership,
+        )
 
     async def get_sp500_history(
         self,
@@ -278,45 +323,58 @@ class YFinanceGateway(FinancialDataGateway):
     # プライベートメソッド
     # ========================================
 
-    def _calculate_eps_growth_quarterly(self, ticker: yf.Ticker) -> float | None:
-        """四半期EPS成長率を計算"""
+    def _extract_quarterly_eps(self, ticker: yf.Ticker) -> list[float]:
+        """
+        四半期EPSデータを抽出
+
+        Args:
+            ticker: yfinance Tickerオブジェクト
+
+        Returns:
+            list[float]: 四半期EPS（新しい順）
+        """
         try:
             quarterly = ticker.quarterly_earnings
-            if quarterly is None or len(quarterly) < 2:
-                return None
+            if quarterly is None or len(quarterly) == 0:
+                return []
 
-            # 最新四半期と前年同期を比較
-            current = quarterly.iloc[0]["Reported EPS"]
-            previous = (
-                quarterly.iloc[-1]["Reported EPS"]
-                if len(quarterly) >= 4
-                else quarterly.iloc[1]["Reported EPS"]
-            )
+            # Reported EPS カラムから値を取得（新しい順）
+            eps_list = []
+            for _, row in quarterly.iterrows():
+                eps = row.get("Reported EPS")
+                if eps is not None:
+                    eps_list.append(float(eps))
 
-            if previous == 0:
-                return None
-
-            return round(((current - previous) / abs(previous)) * 100, 2)
+            return eps_list
         except Exception:
-            return None
+            return []
 
-    def _calculate_eps_growth_annual(self, ticker: yf.Ticker) -> float | None:
-        """年間EPS成長率を計算"""
+    def _extract_annual_eps(self, ticker: yf.Ticker) -> list[float]:
+        """
+        年間EPSデータを抽出
+
+        Args:
+            ticker: yfinance Tickerオブジェクト
+
+        Returns:
+            list[float]: 年間EPS（新しい順）
+        """
         try:
             annual = ticker.earnings
-            if annual is None or len(annual) < 2:
-                return None
+            if annual is None or len(annual) == 0:
+                return []
 
-            # 最新年度と前年度を比較
-            current = annual.iloc[-1]["Earnings"]
-            previous = annual.iloc[-2]["Earnings"]
+            # Earnings カラムから値を取得（古い順でデータが来るので逆順にする）
+            eps_list = []
+            for _, row in annual.iterrows():
+                earnings = row.get("Earnings")
+                if earnings is not None:
+                    eps_list.append(float(earnings))
 
-            if previous == 0:
-                return None
-
-            return round(((current - previous) / abs(previous)) * 100, 2)
+            # 新しい順に並べ替え
+            return list(reversed(eps_list))
         except Exception:
-            return None
+            return []
 
     @staticmethod
     def _to_percent(value: float | None) -> float | None:

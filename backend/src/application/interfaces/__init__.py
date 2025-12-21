@@ -5,6 +5,7 @@ from src.application.interfaces.financial_data_gateway import (
     FinancialMetrics,
     HistoricalBar,
     QuoteData,
+    RawFinancialData,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "FinancialMetrics",
     "HistoricalBar",
     "QuoteData",
+    "RawFinancialData",
 ]

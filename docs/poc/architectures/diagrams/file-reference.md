@@ -29,6 +29,8 @@ backend/src/
 │
 ├── application/               # === Application層 ===
 │   ├── use_cases/
+│   │   ├── data/
+│   │   │   └── get_financial_metrics.py  # 財務指標取得（EPS成長率計算含む）
 │   │   ├── screener/
 │   │   │   ├── screen_canslim_stocks.py  # CAN-SLIMスクリーニング
 │   │   │   ├── get_stock_detail.py       # 銘柄詳細取得
@@ -40,7 +42,7 @@ backend/src/
 │   │   ├── screener_dto.py    # ScreenerFilterInput, StockDetailOutput等
 │   │   └── market_dto.py      # MarketStatusOutput等
 │   └── interfaces/
-│       └── financial_data_gateway.py  # FinancialDataGateway IF
+│       └── financial_data_gateway.py  # FinancialDataGateway IF, RawFinancialData
 │
 ├── domain/                    # === Domain層 ===
 │   ├── entities/
@@ -51,8 +53,9 @@ backend/src/
 │   │   ├── canslim_score.py   # CANSLIMScore, CANSLIMCriteria
 │   │   └── market_indicators.py  # MarketIndicators, VIXIndicator等
 │   ├── services/
-│   │   ├── market_analyzer.py      # マーケット状態分析
-│   │   └── rs_rating_calculator.py # RS Rating計算
+│   │   ├── eps_growth_calculator.py  # EPS成長率計算
+│   │   ├── market_analyzer.py        # マーケット状態分析
+│   │   └── rs_rating_calculator.py   # RS Rating計算
 │   ├── repositories/
 │   │   ├── stock_repository.py          # StockRepository IF
 │   │   ├── market_data_repository.py    # MarketDataRepository IF
@@ -152,6 +155,8 @@ frontend/src/
 | CAN-SLIMスクリーニング | `screen_canslim_stocks.py` | `useScreener.ts` |
 | マーケット状態判定 | `market_analyzer.py` | `useMarketStatus.ts` |
 | RS Rating計算 | `rs_rating_calculator.py` | - |
+| EPS成長率計算 | `eps_growth_calculator.py` | - |
+| 財務指標取得 | `get_financial_metrics.py` | `useStockData.ts` |
 | 株価チャート表示 | - | `PriceChart.tsx` |
 | フィルター設定 | `ScreenerFilter` | `FilterPanel.tsx` |
 
