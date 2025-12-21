@@ -272,12 +272,27 @@ classDiagram
 
 ## 5. Infrastructure Layer
 
+### Mappers
+
+```mermaid
+classDiagram
+    class StockModelMapper {
+        +to_entity(model: ScreenerResultModel)$ Stock
+        +to_model(entity: Stock, existing?)$ ScreenerResultModel
+    }
+
+    StockModelMapper --> Stock
+    StockModelMapper --> ScreenerResultModel
+    StockModelMapper --> CANSLIMScore
+```
+
 ### Repositories
 
 ```mermaid
 classDiagram
     class PostgresScreenerRepository {
         -_session: Session
+        -_mapper: StockModelMapper
         +get_by_symbol(symbol) Stock?
         +get_by_symbols(symbols) list~Stock~
         +screen(filter, limit, offset) ScreenerResult
@@ -285,8 +300,6 @@ classDiagram
         +save_many(stocks) void
         +delete_by_symbol(symbol) bool
         +get_all_symbols() list~str~
-        -_model_to_entity(model) Stock
-        -_calc_distance_from_high(price, high) float
     }
 
     class ScreenerResultModel {
@@ -311,6 +324,7 @@ classDiagram
         +created_at: datetime
     }
 
+    PostgresScreenerRepository --> StockModelMapper
     PostgresScreenerRepository --> ScreenerResultModel
     PostgresScreenerRepository ..|> StockRepository
 ```

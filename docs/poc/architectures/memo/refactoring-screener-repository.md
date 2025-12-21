@@ -1,8 +1,9 @@
 # PostgresScreenerRepository 責務分離 リファクタリング計画
 
-## ステータス: 検討中
+## ステータス: 完了 ✅
 
 作成日: 2024-12-21
+完了日: 2024-12-21
 
 ---
 
@@ -359,6 +360,65 @@ backend/src/
 - `StockRepository` インターフェース
 - Presentation層のコントローラー
 - フロントエンド
+
+---
+
+## 実装完了サマリー
+
+### 実施内容（Option A: 最小限の変更）
+
+| 優先度 | アクション | 状態 | 備考 |
+|--------|-----------|------|------|
+| **高** | `_calc_distance_from_high()` 削除 | ✅ 完了 | Stockエンティティのプロパティを使用 |
+| **高** | `CANSLIMScore.from_dict()` 追加 | ✅ 完了 | `to_dict()` も追加 |
+| **中** | `StockModelMapper` 作成 | ✅ 完了 | `infrastructure/mappers/` に配置 |
+| **低** | Specificationパターン導入 | 保留 | 将来必要に応じて |
+
+### 新規作成ファイル
+
+```
+backend/src/infrastructure/mappers/
+├── __init__.py
+└── stock_model_mapper.py    # StockModelMapper
+```
+
+### 変更ファイル
+
+```
+backend/src/
+├── domain/value_objects/
+│   └── canslim_score.py                  # to_dict(), from_dict() 追加
+└── infrastructure/repositories/
+    └── postgres_screener_repository.py   # マッパー使用、ドメインロジック削除
+```
+
+### アーキテクチャ変更
+
+```
+Before:
+Repository._model_to_entity()
+├── json.loads(canslim_detail)
+├── CANSLIMScore.calculate()    ← 再計算（問題）
+├── _calc_distance_from_high()  ← ドメインロジック（SRP違反）
+└── Stock()
+
+After:
+Repository
+├── 純粋なCRUD操作のみ
+└── _mapper.to_entity() に委譲
+    ↓
+StockModelMapper.to_entity()
+├── json.loads(canslim_detail)
+├── CANSLIMScore.from_dict()    ← 再計算なし（復元のみ）
+└── Stock()
+```
+
+### 改善点
+
+1. **SRP準拠**: Repositoryからドメインロジックとマッピングロジックを分離
+2. **再計算防止**: `CANSLIMScore.from_dict()` により保存時と復元時でスコアが一致
+3. **テスタビリティ向上**: マッパーを単体でテスト可能
+4. **保守性向上**: 変換ロジックが一箇所に集約
 
 ---
 

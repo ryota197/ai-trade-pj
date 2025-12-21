@@ -1,8 +1,5 @@
 """PostgreSQL スクリーナーリポジトリ"""
 
-import json
-from datetime import datetime
-
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -12,8 +9,8 @@ from src.domain.repositories.stock_repository import (
     ScreenerResult,
     StockRepository,
 )
-from src.domain.value_objects.canslim_score import CANSLIMScore
 from src.infrastructure.database.models.screener_result_model import ScreenerResultModel
+from src.infrastructure.mappers.stock_model_mapper import StockModelMapper
 
 
 class PostgresScreenerRepository(StockRepository):
@@ -22,10 +19,22 @@ class PostgresScreenerRepository(StockRepository):
 
     StockRepositoryインターフェースを実装し、
     スクリーニング結果をPostgreSQLに保存・取得する。
+
+    責務:
+        - 純粋なCRUD操作
+        - スクリーニングクエリの実行
+
+    Note:
+        Model ↔ Entity の変換は StockModelMapper に委譲している。
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        mapper: StockModelMapper | None = None,
+    ) -> None:
         self._session = session
+        self._mapper = mapper or StockModelMapper()
 
     async def get_by_symbol(self, symbol: str) -> Stock | None:
         """
@@ -45,7 +54,7 @@ class PostgresScreenerRepository(StockRepository):
         if model is None:
             return None
 
-        return self._model_to_entity(model)
+        return self._mapper.to_entity(model)
 
     async def get_by_symbols(self, symbols: list[str]) -> list[Stock]:
         """
@@ -63,7 +72,7 @@ class PostgresScreenerRepository(StockRepository):
         )
         models = self._session.scalars(stmt).all()
 
-        return [self._model_to_entity(model) for model in models]
+        return [self._mapper.to_entity(model) for model in models]
 
     async def screen(
         self,
@@ -164,62 +173,10 @@ class PostgresScreenerRepository(StockRepository):
         )
         existing = self._session.scalars(stmt).first()
 
-        # CAN-SLIMスコアをJSON化
-        canslim_detail = None
-        if stock.canslim_score:
-            canslim_detail = json.dumps(
-                {
-                    "c_score": stock.canslim_score.c_score.score,
-                    "a_score": stock.canslim_score.a_score.score,
-                    "n_score": stock.canslim_score.n_score.score,
-                    "s_score": stock.canslim_score.s_score.score,
-                    "l_score": stock.canslim_score.l_score.score,
-                    "i_score": stock.canslim_score.i_score.score,
-                }
-            )
+        # マッパーを使用してモデルに変換
+        model = self._mapper.to_model(stock, existing)
 
-        if existing:
-            # 更新
-            existing.name = stock.name
-            existing.price = stock.price
-            existing.change_percent = stock.change_percent
-            existing.volume = stock.volume
-            existing.avg_volume = stock.avg_volume
-            existing.market_cap = stock.market_cap
-            existing.pe_ratio = stock.pe_ratio
-            existing.week_52_high = stock.week_52_high
-            existing.week_52_low = stock.week_52_low
-            existing.eps_growth_quarterly = stock.eps_growth_quarterly
-            existing.eps_growth_annual = stock.eps_growth_annual
-            existing.rs_rating = stock.rs_rating
-            existing.institutional_ownership = stock.institutional_ownership
-            existing.canslim_total_score = (
-                stock.canslim_score.total_score if stock.canslim_score else 0
-            )
-            existing.canslim_detail = canslim_detail
-            existing.updated_at = datetime.now()
-        else:
-            # 新規作成
-            model = ScreenerResultModel(
-                symbol=stock.symbol.upper(),
-                name=stock.name,
-                price=stock.price,
-                change_percent=stock.change_percent,
-                volume=stock.volume,
-                avg_volume=stock.avg_volume,
-                market_cap=stock.market_cap,
-                pe_ratio=stock.pe_ratio,
-                week_52_high=stock.week_52_high,
-                week_52_low=stock.week_52_low,
-                eps_growth_quarterly=stock.eps_growth_quarterly,
-                eps_growth_annual=stock.eps_growth_annual,
-                rs_rating=stock.rs_rating,
-                institutional_ownership=stock.institutional_ownership,
-                canslim_total_score=(
-                    stock.canslim_score.total_score if stock.canslim_score else 0
-                ),
-                canslim_detail=canslim_detail,
-            )
+        if not existing:
             self._session.add(model)
 
         self._session.commit()
@@ -261,72 +218,3 @@ class PostgresScreenerRepository(StockRepository):
         self._session.commit()
 
         return result.rowcount > 0
-
-    def _model_to_entity(self, model: ScreenerResultModel) -> Stock:
-        """
-        SQLAlchemyモデルをドメインエンティティに変換
-
-        Args:
-            model: SQLAlchemyモデル
-
-        Returns:
-            Stock: ドメインエンティティ
-        """
-        # CAN-SLIMスコアを復元
-        canslim_score = None
-        if model.canslim_detail:
-            try:
-                detail = json.loads(model.canslim_detail)
-                # 簡易的に復元（詳細情報は失われる）
-                canslim_score = CANSLIMScore.calculate(
-                    eps_growth_quarterly=float(model.eps_growth_quarterly)
-                    if model.eps_growth_quarterly
-                    else None,
-                    eps_growth_annual=float(model.eps_growth_annual)
-                    if model.eps_growth_annual
-                    else None,
-                    distance_from_52w_high=self._calc_distance_from_high(
-                        float(model.price), float(model.week_52_high)
-                    ),
-                    volume_ratio=model.volume / model.avg_volume
-                    if model.avg_volume > 0
-                    else 0,
-                    rs_rating=model.rs_rating,
-                    institutional_ownership=float(model.institutional_ownership)
-                    if model.institutional_ownership
-                    else None,
-                )
-            except Exception:
-                pass
-
-        return Stock(
-            symbol=model.symbol,
-            name=model.name,
-            price=float(model.price),
-            change_percent=float(model.change_percent),
-            volume=model.volume,
-            avg_volume=model.avg_volume,
-            market_cap=float(model.market_cap) if model.market_cap else None,
-            pe_ratio=float(model.pe_ratio) if model.pe_ratio else None,
-            week_52_high=float(model.week_52_high),
-            week_52_low=float(model.week_52_low),
-            eps_growth_quarterly=float(model.eps_growth_quarterly)
-            if model.eps_growth_quarterly
-            else None,
-            eps_growth_annual=float(model.eps_growth_annual)
-            if model.eps_growth_annual
-            else None,
-            rs_rating=model.rs_rating,
-            institutional_ownership=float(model.institutional_ownership)
-            if model.institutional_ownership
-            else None,
-            canslim_score=canslim_score,
-            updated_at=model.updated_at,
-        )
-
-    @staticmethod
-    def _calc_distance_from_high(price: float, week_52_high: float) -> float:
-        """52週高値からの乖離率を計算"""
-        if week_52_high == 0:
-            return 0.0
-        return ((week_52_high - price) / week_52_high) * 100

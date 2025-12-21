@@ -73,6 +73,33 @@ class CANSLIMCriteria:
             description=description,
         )
 
+    def to_dict(self) -> dict:
+        """辞書形式に変換"""
+        return {
+            "score": self.score,
+            "grade": self.grade.value,
+            "value": self.value,
+            "threshold": self.threshold,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CANSLIMCriteria":
+        """辞書から復元"""
+        grade_value = data.get("grade", "na")
+        try:
+            grade = ScoreGrade(grade_value)
+        except ValueError:
+            grade = ScoreGrade.NA
+
+        return cls(
+            score=data.get("score", 0),
+            grade=grade,
+            value=data.get("value"),
+            threshold=data.get("threshold", 0.0),
+            description=data.get("description", ""),
+        )
+
 
 @dataclass(frozen=True)
 class CANSLIMScore:
@@ -228,4 +255,35 @@ class CANSLIMScore:
             s_score=s_score,
             l_score=l_score,
             i_score=i_score,
+        )
+
+    def to_dict(self) -> dict:
+        """辞書形式に変換（永続化用）"""
+        return {
+            "c_score": self.c_score.to_dict(),
+            "a_score": self.a_score.to_dict(),
+            "n_score": self.n_score.to_dict(),
+            "s_score": self.s_score.to_dict(),
+            "l_score": self.l_score.to_dict(),
+            "i_score": self.i_score.to_dict(),
+            "total_score": self.total_score,
+            "passing_count": self.passing_criteria_count,
+            "overall_grade": self.overall_grade.value,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CANSLIMScore":
+        """
+        辞書から復元（再計算なし）
+
+        保存されたデータから直接CANSLIMScoreを復元する。
+        calculate()と異なり、スコアを再計算しない。
+        """
+        return cls(
+            c_score=CANSLIMCriteria.from_dict(data.get("c_score", {})),
+            a_score=CANSLIMCriteria.from_dict(data.get("a_score", {})),
+            n_score=CANSLIMCriteria.from_dict(data.get("n_score", {})),
+            s_score=CANSLIMCriteria.from_dict(data.get("s_score", {})),
+            l_score=CANSLIMCriteria.from_dict(data.get("l_score", {})),
+            i_score=CANSLIMCriteria.from_dict(data.get("i_score", {})),
         )

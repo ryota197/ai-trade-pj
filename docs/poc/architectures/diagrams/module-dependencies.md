@@ -84,6 +84,7 @@ graph TB
     subgraph "Infrastructure Layer"
         direction LR
         I1[PostgresScreenerRepository]
+        I2[StockModelMapper]
         I3[YFinanceGateway]
         I4[YFinanceMarketDataGateway]
     end
@@ -94,6 +95,7 @@ graph TB
     A1 & A2 --> I1
     A3 & A4 --> I4
     A5 --> I3
+    I1 --> I2
     I1 --> External_DB[(PostgreSQL)]
     I3 & I4 --> External_API[yfinance]
 ```
@@ -132,6 +134,7 @@ graph LR
 
     subgraph "Infrastructure"
         pg_screener[PostgresScreenerRepository]
+        stock_mapper[StockModelMapper]
         yf_gateway[YFinanceGateway]
         yf_market[YFinanceMarketDataGateway]
     end
@@ -159,6 +162,9 @@ graph LR
     screen_uc -.->|DI| pg_screener & yf_gateway
     status_uc -.->|DI| yf_market
     financials_uc -.->|DI| yf_gateway
+
+    %% Infrastructure internal dependencies
+    pg_screener --> stock_mapper
 ```
 
 ---

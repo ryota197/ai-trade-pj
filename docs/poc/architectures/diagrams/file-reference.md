@@ -67,6 +67,8 @@ backend/src/
     ├── gateways/
     │   ├── yfinance_gateway.py           # 株価・財務データ取得
     │   └── yfinance_market_data_gateway.py # VIX・RSI等取得
+    ├── mappers/
+    │   └── stock_model_mapper.py         # Stock Entity ↔ Model 変換
     ├── repositories/
     │   ├── postgres_screener_repository.py  # スクリーナーDB操作
     │   └── postgres_market_repository.py    # マーケットDB操作
