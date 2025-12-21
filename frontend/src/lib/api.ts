@@ -5,6 +5,21 @@
 import type { ApiResponse, HealthResponse } from "@/types/api";
 import type { MarketStatusResponse, MarketIndicatorsResponse } from "@/types/market";
 import type {
+  WatchlistResponse,
+  WatchlistItem,
+  AddToWatchlistRequest,
+  UpdateWatchlistRequest,
+  TradeListResponse,
+  Trade,
+  OpenTradeRequest,
+  CloseTradeRequest,
+  OpenPosition,
+  Performance,
+  DetailedPerformanceResponse,
+  TradeFilter,
+  WatchlistFilter,
+} from "@/types/portfolio";
+import type {
   ScreenerResponse,
   ScreenerFilter,
   StockDetail,
@@ -144,4 +159,171 @@ export async function getQuote(symbol: string): Promise<ApiResponse<{
   timestamp: string;
 }>> {
   return fetchApi(`/data/quote/${symbol}`, { cache: "no-store" });
+}
+
+// ============================================================
+// ポートフォリオ API
+// ============================================================
+
+/**
+ * ウォッチリスト一覧取得API
+ */
+export async function getWatchlist(
+  filter: WatchlistFilter = {}
+): Promise<ApiResponse<WatchlistResponse>> {
+  const params = new URLSearchParams();
+  if (filter.status) params.append("status", filter.status);
+  if (filter.limit) params.append("limit", filter.limit.toString());
+  if (filter.offset) params.append("offset", filter.offset.toString());
+
+  const queryString = params.toString();
+  const endpoint = queryString
+    ? `/portfolio/watchlist?${queryString}`
+    : "/portfolio/watchlist";
+
+  return fetchApi<ApiResponse<WatchlistResponse>>(endpoint, { cache: "no-store" });
+}
+
+/**
+ * ウォッチリスト追加API
+ */
+export async function addToWatchlist(
+  data: AddToWatchlistRequest
+): Promise<ApiResponse<WatchlistItem>> {
+  return fetchApi<ApiResponse<WatchlistItem>>("/portfolio/watchlist", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * ウォッチリスト更新API
+ */
+export async function updateWatchlistItem(
+  itemId: number,
+  data: UpdateWatchlistRequest
+): Promise<ApiResponse<WatchlistItem>> {
+  return fetchApi<ApiResponse<WatchlistItem>>(`/portfolio/watchlist/${itemId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * ウォッチリスト削除API
+ */
+export async function removeFromWatchlist(
+  symbol: string
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<ApiResponse<{ message: string }>>(
+    `/portfolio/watchlist/${symbol}`,
+    { method: "DELETE" }
+  );
+}
+
+/**
+ * トレード一覧取得API
+ */
+export async function getTrades(
+  filter: TradeFilter = {}
+): Promise<ApiResponse<TradeListResponse>> {
+  const params = new URLSearchParams();
+  if (filter.status) params.append("status", filter.status);
+  if (filter.trade_type) params.append("trade_type", filter.trade_type);
+  if (filter.symbol) params.append("symbol", filter.symbol);
+  if (filter.limit) params.append("limit", filter.limit.toString());
+  if (filter.offset) params.append("offset", filter.offset.toString());
+
+  const queryString = params.toString();
+  const endpoint = queryString
+    ? `/portfolio/trades?${queryString}`
+    : "/portfolio/trades";
+
+  return fetchApi<ApiResponse<TradeListResponse>>(endpoint, { cache: "no-store" });
+}
+
+/**
+ * オープンポジション取得API
+ */
+export async function getOpenPositions(): Promise<ApiResponse<OpenPosition[]>> {
+  return fetchApi<ApiResponse<OpenPosition[]>>("/portfolio/trades/positions", {
+    cache: "no-store",
+  });
+}
+
+/**
+ * 新規トレード作成API
+ */
+export async function openTrade(
+  data: OpenTradeRequest
+): Promise<ApiResponse<Trade>> {
+  return fetchApi<ApiResponse<Trade>>("/portfolio/trades", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * トレード決済API
+ */
+export async function closeTrade(
+  tradeId: number,
+  data: CloseTradeRequest
+): Promise<ApiResponse<Trade>> {
+  return fetchApi<ApiResponse<Trade>>(`/portfolio/trades/${tradeId}/close`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * トレードキャンセルAPI
+ */
+export async function cancelTrade(
+  tradeId: number
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<ApiResponse<{ message: string }>>(
+    `/portfolio/trades/${tradeId}`,
+    { method: "DELETE" }
+  );
+}
+
+/**
+ * パフォーマンス取得API
+ */
+export async function getPerformance(
+  startDate?: string,
+  endDate?: string
+): Promise<ApiResponse<Performance>> {
+  const params = new URLSearchParams();
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+
+  const queryString = params.toString();
+  const endpoint = queryString
+    ? `/portfolio/performance?${queryString}`
+    : "/portfolio/performance";
+
+  return fetchApi<ApiResponse<Performance>>(endpoint, { cache: "no-store" });
+}
+
+/**
+ * 詳細パフォーマンス取得API
+ */
+export async function getDetailedPerformance(
+  startDate?: string,
+  endDate?: string
+): Promise<ApiResponse<DetailedPerformanceResponse>> {
+  const params = new URLSearchParams();
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+
+  const queryString = params.toString();
+  const endpoint = queryString
+    ? `/portfolio/performance/detailed?${queryString}`
+    : "/portfolio/performance/detailed";
+
+  return fetchApi<ApiResponse<DetailedPerformanceResponse>>(endpoint, {
+    cache: "no-store",
+  });
 }
