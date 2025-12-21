@@ -128,33 +128,37 @@ CREATE TABLE watchlist (
     symbol VARCHAR(10) NOT NULL UNIQUE,
 
     -- 目標価格
-    target_entry_price DECIMAL(10,2),
-    stop_loss_price DECIMAL(10,2),
-    target_profit_price DECIMAL(10,2),
+    target_entry_price DECIMAL(12,2),
+    stop_loss_price DECIMAL(12,2),
+    target_price DECIMAL(12,2),
 
     -- メモ
     notes TEXT,
 
-    -- 追加情報
-    pattern_detected VARCHAR(50),
-    alert_enabled BOOLEAN DEFAULT TRUE,
+    -- ステータス
+    status VARCHAR(20) NOT NULL DEFAULT 'watching',
+    triggered_at TIMESTAMP,
 
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    -- メタデータ
+    added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_watchlist_status CHECK (status IN ('watching', 'triggered', 'expired', 'removed'))
 );
 
-COMMENT ON TABLE watchlist IS '監視銘柄リスト';
+COMMENT ON TABLE watchlist IS '監視銘柄リスト（CAN-SLIMスクリーニング結果）';
 COMMENT ON COLUMN watchlist.symbol IS 'ティッカーシンボル';
 COMMENT ON COLUMN watchlist.target_entry_price IS 'エントリー目標価格';
 COMMENT ON COLUMN watchlist.stop_loss_price IS 'ストップロス価格';
-COMMENT ON COLUMN watchlist.target_profit_price IS '利確目標価格';
+COMMENT ON COLUMN watchlist.target_price IS '利確目標価格';
 COMMENT ON COLUMN watchlist.notes IS 'メモ（エントリー理由など）';
-COMMENT ON COLUMN watchlist.pattern_detected IS '検出されたチャートパターン';
-COMMENT ON COLUMN watchlist.alert_enabled IS 'アラート有効フラグ';
+COMMENT ON COLUMN watchlist.status IS 'ステータス: watching/triggered/expired/removed';
+COMMENT ON COLUMN watchlist.triggered_at IS 'エントリー条件達成日時';
 COMMENT ON COLUMN watchlist.added_at IS '追加日時';
 COMMENT ON COLUMN watchlist.updated_at IS '更新日時';
 
 CREATE INDEX idx_watchlist_symbol ON watchlist(symbol);
+CREATE INDEX idx_watchlist_status ON watchlist(status);
 
 -- =====================================================
 -- paper_trades: ペーパートレード記録
@@ -166,40 +170,54 @@ CREATE TABLE paper_trades (
     -- トレード情報
     trade_type VARCHAR(10) NOT NULL,
     quantity INTEGER NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    total_amount DECIMAL(12,2) GENERATED ALWAYS AS (quantity * price) STORED,
 
-    -- 実行日時
-    traded_at TIMESTAMP NOT NULL,
+    -- エントリー
+    entry_price DECIMAL(12,2) NOT NULL,
+    entry_date TIMESTAMP NOT NULL,
 
-    -- 関連情報
+    -- エグジット
+    exit_price DECIMAL(12,2),
+    exit_date TIMESTAMP,
+
+    -- リスク管理
+    stop_loss_price DECIMAL(12,2),
+    target_price DECIMAL(12,2),
+
+    -- ステータス
+    status VARCHAR(20) NOT NULL DEFAULT 'open',
+
+    -- メモ
     notes TEXT,
-    strategy VARCHAR(50),
 
-    -- ポジション管理用
-    position_id UUID,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- メタデータ
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT valid_trade_type CHECK (trade_type IN ('buy', 'sell')),
+    CONSTRAINT valid_trade_status CHECK (status IN ('open', 'closed', 'cancelled')),
     CONSTRAINT positive_quantity CHECK (quantity > 0),
-    CONSTRAINT positive_price CHECK (price > 0)
+    CONSTRAINT positive_entry_price CHECK (entry_price > 0)
 );
 
 COMMENT ON TABLE paper_trades IS 'ペーパートレード（仮想売買）記録';
 COMMENT ON COLUMN paper_trades.symbol IS 'ティッカーシンボル';
 COMMENT ON COLUMN paper_trades.trade_type IS '売買種別: buy/sell';
 COMMENT ON COLUMN paper_trades.quantity IS '数量（株数）';
-COMMENT ON COLUMN paper_trades.price IS '約定価格';
-COMMENT ON COLUMN paper_trades.total_amount IS '約定金額（自動計算: quantity * price）';
-COMMENT ON COLUMN paper_trades.traded_at IS '約定日時';
+COMMENT ON COLUMN paper_trades.entry_price IS 'エントリー価格';
+COMMENT ON COLUMN paper_trades.entry_date IS 'エントリー日時';
+COMMENT ON COLUMN paper_trades.exit_price IS '決済価格';
+COMMENT ON COLUMN paper_trades.exit_date IS '決済日時';
+COMMENT ON COLUMN paper_trades.stop_loss_price IS 'ストップロス価格';
+COMMENT ON COLUMN paper_trades.target_price IS '目標価格';
+COMMENT ON COLUMN paper_trades.status IS 'ステータス: open/closed/cancelled';
 COMMENT ON COLUMN paper_trades.notes IS 'メモ（エントリー/エグジット理由）';
-COMMENT ON COLUMN paper_trades.strategy IS '戦略: breakout/pullback/swing等';
-COMMENT ON COLUMN paper_trades.position_id IS 'ポジションID（同一ポジションのbuy/sellを紐付け）';
+COMMENT ON COLUMN paper_trades.created_at IS '作成日時';
+COMMENT ON COLUMN paper_trades.updated_at IS '更新日時';
 
 CREATE INDEX idx_paper_trades_symbol ON paper_trades(symbol);
-CREATE INDEX idx_paper_trades_traded_at ON paper_trades(traded_at DESC);
-CREATE INDEX idx_paper_trades_position ON paper_trades(position_id);
+CREATE INDEX idx_paper_trades_status ON paper_trades(status);
+CREATE INDEX idx_paper_trades_entry_date ON paper_trades(entry_date DESC);
+CREATE INDEX idx_paper_trades_exit_date ON paper_trades(exit_date DESC);
 
 -- =====================================================
 -- price_cache: 株価データキャッシュ
