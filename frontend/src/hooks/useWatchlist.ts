@@ -32,7 +32,7 @@ interface UseWatchlistResult {
   add: (request: AddToWatchlistRequest) => Promise<WatchlistItem | null>;
   /** ウォッチリストを更新 */
   update: (
-    itemId: number,
+    symbol: string,
     request: UpdateWatchlistRequest
   ) => Promise<WatchlistItem | null>;
   /** ウォッチリストから削除 */
@@ -97,13 +97,13 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
 
   const update = useCallback(
     async (
-      itemId: number,
+      symbol: string,
       request: UpdateWatchlistRequest
     ): Promise<WatchlistItem | null> => {
       try {
         setIsUpdating(true);
         setError(null);
-        const response = await updateWatchlistItem(itemId, request);
+        const response = await updateWatchlistItem(symbol, request);
         if (response.success && response.data) {
           await fetchData(); // リストを再取得
           return response.data;

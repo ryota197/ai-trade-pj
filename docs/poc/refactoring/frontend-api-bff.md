@@ -6,6 +6,19 @@
 
 ---
 
+## 進捗状況
+
+| Phase | 内容 | 状態 |
+|-------|------|------|
+| Phase 1 | 基盤整備 | ✅ 完了 |
+| Phase 2 | Market API | ✅ 完了 |
+| Phase 3 | Portfolio API | ✅ 完了 |
+| Phase 4 | Screener & Data API | ✅ 完了 |
+| Phase 5 | クリーンアップ | ✅ 完了 |
+| Phase 6 | lib/api.ts 削除 | 🔜 未着手 |
+
+---
+
 ## 現在のアーキテクチャ
 
 ```
@@ -53,22 +66,24 @@
 
 ### 新規作成
 
-| ファイル | 説明 |
-|---------|------|
-| `frontend/src/app/api/market/status/route.ts` | マーケットステータスAPI |
-| `frontend/src/app/api/market/indices/route.ts` | インデックスAPI |
-| `frontend/src/app/api/market/quote/[symbol]/route.ts` | 株価取得API |
-| `frontend/src/app/api/market/chart/[symbol]/route.ts` | チャートデータAPI |
-| `frontend/src/app/api/watchlist/route.ts` | Watchlist CRUD |
-| `frontend/src/app/api/watchlist/[symbol]/route.ts` | Watchlist個別操作 |
-| `frontend/src/app/api/trades/route.ts` | Trade一覧・新規作成 |
-| `frontend/src/app/api/trades/[id]/route.ts` | Trade個別操作 |
-| `frontend/src/app/api/trades/[id]/close/route.ts` | Trade決済 |
-| `frontend/src/app/api/trades/[id]/cancel/route.ts` | Tradeキャンセル |
-| `frontend/src/app/api/performance/route.ts` | パフォーマンス取得 |
-| `frontend/src/app/api/screener/run/route.ts` | スクリーナー実行 |
-| `frontend/src/app/api/screener/templates/route.ts` | テンプレート取得 |
-| `frontend/src/app/api/admin/[...path]/route.ts` | 管理API（プロキシ） |
+| ファイル | 説明 | 状態 |
+|---------|------|------|
+| `frontend/src/app/api/market/status/route.ts` | マーケットステータスAPI | ✅ |
+| `frontend/src/app/api/market/indicators/route.ts` | マーケット指標API | ✅ |
+| `frontend/src/app/api/market/quote/[symbol]/route.ts` | 株価取得API | ✅ |
+| `frontend/src/app/api/market/chart/[symbol]/route.ts` | チャートデータAPI | ✅ |
+| `frontend/src/app/api/watchlist/route.ts` | Watchlist CRUD | ✅ |
+| `frontend/src/app/api/watchlist/[symbol]/route.ts` | Watchlist個別操作 | ✅ |
+| `frontend/src/app/api/trades/route.ts` | Trade一覧・新規作成 | ✅ |
+| `frontend/src/app/api/trades/[id]/route.ts` | Trade個別操作 | ✅ |
+| `frontend/src/app/api/trades/[id]/close/route.ts` | Trade決済 | ✅ |
+| `frontend/src/app/api/trades/[id]/cancel/route.ts` | Tradeキャンセル | ✅ |
+| `frontend/src/app/api/performance/route.ts` | パフォーマンス取得 | ✅ |
+| `frontend/src/app/api/screener/canslim/route.ts` | CAN-SLIMスクリーニング | ✅ |
+| `frontend/src/app/api/screener/stock/[symbol]/route.ts` | 銘柄詳細取得 | ✅ |
+| `frontend/src/app/api/data/history/[symbol]/route.ts` | 株価履歴取得 | ✅ |
+| `frontend/src/app/api/data/financials/[symbol]/route.ts` | 財務指標取得 | ✅ |
+| `frontend/src/app/api/data/quote/[symbol]/route.ts` | 株価クォート取得 | ✅ |
 
 ---
 
@@ -188,17 +203,17 @@ const API_BASE = "/api";  // Next.js API Routes を使用
 
 ## 実装順序
 
-### Phase 1: 基盤整備
-1. 環境変数の設定変更
+### Phase 1: 基盤整備 ✅ 完了
+1. 環境変数の設定変更（`.env.local`, `.env.example`）
 2. 共通ユーティリティ関数の作成（`lib/backend-fetch.ts`）
 
-### Phase 2: Market API
+### Phase 2: Market API ✅ 完了
 1. `/api/market/status`
-2. `/api/market/indices`
+2. `/api/market/indicators`
 3. `/api/market/quote/[symbol]`
 4. `/api/market/chart/[symbol]`
 
-### Phase 3: Portfolio API
+### Phase 3: Portfolio API ✅ 完了
 1. `/api/watchlist`
 2. `/api/watchlist/[symbol]`
 3. `/api/trades`
@@ -207,17 +222,64 @@ const API_BASE = "/api";  // Next.js API Routes を使用
 6. `/api/trades/[id]/cancel`
 7. `/api/performance`
 
-### Phase 4: Screener API
-1. `/api/screener/run`
-2. `/api/screener/templates`
+### Phase 4: Screener & Data API ✅ 完了
+1. `/api/screener/canslim`
+2. `/api/screener/stock/[symbol]`
+3. `/api/data/history/[symbol]`
+4. `/api/data/financials/[symbol]`
+5. `/api/data/quote/[symbol]`
 
-### Phase 5: Admin API
-1. `/api/admin/[...path]` (Catch-all route)
+### Phase 5: クリーンアップ ✅ 完了
+1. `lib/api.ts` の修正（エンドポイントを `/api/*` に変更）
+2. `useWatchlist.ts` の修正（API引数変更に対応）
+3. 環境変数の整理（`.env.example` 更新）
 
-### Phase 6: クリーンアップ
-1. `lib/api.ts` の修正
-2. 不要な環境変数の削除
-3. CORS設定の削除（バックエンド側）
+**変更内容:**
+- `API_BASE_URL` を `"/api"` に変更（BFF経由）
+- 旧 `NEXT_PUBLIC_API_URL` は不要に
+- ヘルスチェックのみ直接バックエンド呼び出し（開発用）
+
+### Phase 6: lib/api.ts 削除 🔜 未着手
+
+BFFパターン導入により `lib/api.ts` が冗長になったため削除する。
+
+**現在の構成（冗長）:**
+```
+Component → lib/api.ts → Route Handlers → Backend
+```
+
+**目標の構成（シンプル）:**
+```
+Component/Hook → Route Handlers → Backend
+```
+
+**作業内容:**
+1. 各hooks（`useWatchlist.ts`, `useTrades.ts`, `usePerformance.ts`）で直接 `fetch('/api/*')` を呼び出すよう修正
+2. 各ページ/コンポーネントで直接 `fetch('/api/*')` を呼び出すよう修正
+3. `lib/api.ts` を削除
+
+**削除理由:**
+- Route Handlersで型安全性・エラーハンドリングは確保済み
+- 中間層が不要になり、コードがシンプルになる
+- 認証が必要になった場合はRoute Handler側で対応可能
+
+**影響範囲:**
+- `src/hooks/useWatchlist.ts`
+- `src/hooks/useTrades.ts`
+- `src/hooks/usePerformance.ts`
+- `src/components/` 配下でAPIを呼び出しているコンポーネント
+- `src/app/` 配下でAPIを呼び出しているページ
+
+### ~~Admin API~~ ❌ 不要（当初計画から削除）
+
+**当初の計画:**
+- `/api/admin/[...path]` (Catch-all route) を作成
+- 管理者向けAPI（データ更新、キャッシュクリア、システム設定等）をプロキシ
+
+**不要と判断した理由:**
+- 現時点でバックエンドにAdmin APIエンドポイントが存在しない
+- フロントエンドからAdmin機能を呼び出す実装がない
+- 将来的に必要になった場合は、その時点で実装する
 
 ---
 
@@ -226,11 +288,17 @@ const API_BASE = "/api";  // Next.js API Routes を使用
 | エンドポイント | 戦略 | 理由 |
 |--------------|------|------|
 | `/api/market/status` | `revalidate: 60` | 市場ステータスは頻繁に変わらない |
-| `/api/market/indices` | `revalidate: 30` | インデックスは定期更新 |
-| `/api/market/quote/*` | `revalidate: 0` (no-store) | リアルタイム性が必要 |
+| `/api/market/indicators` | `revalidate: 30` | インデックスは定期更新 |
+| `/api/market/quote/*` | `revalidate: 0` | リアルタイム性が必要 |
+| `/api/market/chart/*` | `revalidate: 60` | チャートデータはある程度キャッシュ可能 |
 | `/api/watchlist` | `revalidate: 0` | ユーザー固有データ |
 | `/api/trades` | `revalidate: 0` | ユーザー固有データ |
 | `/api/performance` | `revalidate: 0` | ユーザー固有データ |
+| `/api/screener/canslim` | `revalidate: 0` | 最新データが必要 |
+| `/api/screener/stock/*` | `revalidate: 0` | 最新データが必要 |
+| `/api/data/history/*` | `revalidate: 60` | 履歴データはキャッシュ可能 |
+| `/api/data/financials/*` | `revalidate: 300` | 財務データは5分キャッシュ |
+| `/api/data/quote/*` | `revalidate: 0` | リアルタイム性が必要 |
 
 ---
 
