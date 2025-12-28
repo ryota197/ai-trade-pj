@@ -114,6 +114,7 @@ Phase 4 (Portfolio) ←─ Phase 3のStock情報を参照 ─────┘
 
 | ドキュメント | 内容 |
 |-------------|------|
+| [implementation-status.md](./implementation-status.md) | 実装状況レポート（積み残し一覧） |
 | [../overview.md](../overview.md) | PoC全体概要 |
 | [../architectures/service-components.md](../architectures/service-components.md) | クリーンアーキテクチャ設計 |
 | [../architectures/api-design.md](../architectures/api-design.md) | API設計 |
