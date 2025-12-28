@@ -261,11 +261,51 @@ gh issue create \
 
 ---
 
+## Issue #5: 管理者機能の認証実装
+
+**Labels**: `enhancement`, `backend`, `security`, `priority:medium`
+
+### 概要
+
+管理者機能へのアクセス制御のため、認証機能を実装する。
+
+### 背景
+
+現在のPoC実装ではローカル環境専用のため認証機能がない。
+デプロイ時には管理者APIエンドポイントへの不正アクセスを防ぐ必要がある。
+
+### 対象エンドポイント
+
+| エンドポイント | 説明 |
+|---------------|------|
+| `POST /api/admin/screener/refresh` | スクリーニングデータ更新開始 |
+| `GET /api/admin/screener/refresh/{job_id}/status` | 進捗確認 |
+| `DELETE /api/admin/screener/refresh/{job_id}` | キャンセル |
+| `/admin/*` | 管理者UIページ |
+
+### 実装案
+
+1. **API Key認証**: 環境変数でキーを設定、Headerで送信
+2. **Basic認証**: admin:password形式
+3. **OAuth/JWT**: 将来のマルチユーザー対応時
+
+### 関連ドキュメント
+
+- `docs/poc/plan/plan-overview.md` - PoC対象外として記載
+- `docs/poc/issues/issue-3-body.md` - 管理者機能
+
+### 工数
+
+中（半日〜1日程度）
+
+---
+
 ## 優先度
 
-| Issue | タイトル | 優先度 | 工数 |
-|-------|---------|--------|------|
-| #1 | PortfolioページにHeader追加 | 高 | 小 |
-| #2 | CAN-SLIMスコア表示 | 高 | 中 |
-| #3 | 管理者向けデータ更新機能 | 中 | 大 |
-| #4 | Marketスナップショットバッチ | 低 | 中 |
+| Issue | タイトル | 優先度 | 工数 | 状態 |
+|-------|---------|--------|------|------|
+| #1 | PortfolioページにHeader追加 | 高 | 小 | ✅ 完了 |
+| #2 | CAN-SLIMスコア表示 | 高 | 中 | ✅ 完了 |
+| #3 | 管理者向けデータ更新機能 | 中 | 大 | 🔴 未対応 |
+| #4 | Marketスナップショットバッチ | 低 | 中 | 🔴 未対応 |
+| #5 | 管理者機能の認証実装 | 中 | 中 | 🔴 未対応（デプロイ時） |

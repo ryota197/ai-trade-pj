@@ -251,3 +251,49 @@ COMMENT ON COLUMN price_cache.adj_close IS '調整後終値（分割・配当調
 COMMENT ON COLUMN price_cache.volume IS '出来高';
 
 CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
+
+-- =====================================================
+-- refresh_jobs: スクリーニングデータ更新ジョブ
+-- =====================================================
+CREATE TABLE refresh_jobs (
+    id SERIAL PRIMARY KEY,
+    job_id VARCHAR(50) NOT NULL UNIQUE,
+
+    -- ジョブ情報
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    source VARCHAR(20) NOT NULL DEFAULT 'custom',
+
+    -- 進捗
+    total_symbols INTEGER NOT NULL DEFAULT 0,
+    processed_count INTEGER NOT NULL DEFAULT 0,
+    succeeded_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+
+    -- エラー情報（JSON配列）
+    errors TEXT,
+
+    -- タイミング
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_job_status CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+    CONSTRAINT valid_job_source CHECK (source IN ('sp500', 'nasdaq100', 'custom'))
+);
+
+COMMENT ON TABLE refresh_jobs IS 'スクリーニングデータ更新ジョブ管理';
+COMMENT ON COLUMN refresh_jobs.job_id IS 'ジョブID（例: refresh_20240115_103000）';
+COMMENT ON COLUMN refresh_jobs.status IS 'ステータス: pending/running/completed/failed/cancelled';
+COMMENT ON COLUMN refresh_jobs.source IS 'データソース: sp500/nasdaq100/custom';
+COMMENT ON COLUMN refresh_jobs.total_symbols IS '対象銘柄数';
+COMMENT ON COLUMN refresh_jobs.processed_count IS '処理済み銘柄数';
+COMMENT ON COLUMN refresh_jobs.succeeded_count IS '成功銘柄数';
+COMMENT ON COLUMN refresh_jobs.failed_count IS '失敗銘柄数';
+COMMENT ON COLUMN refresh_jobs.errors IS 'エラー情報（JSON配列）';
+COMMENT ON COLUMN refresh_jobs.started_at IS '開始日時';
+COMMENT ON COLUMN refresh_jobs.completed_at IS '完了日時';
+COMMENT ON COLUMN refresh_jobs.created_at IS '作成日時';
+
+CREATE INDEX idx_refresh_jobs_job_id ON refresh_jobs(job_id);
+CREATE INDEX idx_refresh_jobs_status ON refresh_jobs(status);
+CREATE INDEX idx_refresh_jobs_created_at ON refresh_jobs(created_at DESC);

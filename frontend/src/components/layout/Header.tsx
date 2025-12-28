@@ -7,6 +7,7 @@ const navLinks = [
   { href: "/", label: "ダッシュボード" },
   { href: "/screener", label: "スクリーナー" },
   { href: "/portfolio", label: "ポートフォリオ" },
+  { href: "/admin/screener", label: "管理" },
 ];
 
 /**

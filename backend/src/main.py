@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import get_settings
 from src.presentation.api import (
+    admin_controller,
     data_controller,
     health_controller,
     market_controller,
@@ -39,6 +40,7 @@ app.include_router(data_controller.router, prefix=settings.api_prefix)
 app.include_router(market_controller.router, prefix=settings.api_prefix)
 app.include_router(screener_controller.router, prefix=settings.api_prefix)
 app.include_router(portfolio_controller.router, prefix=settings.api_prefix)
+app.include_router(admin_controller.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

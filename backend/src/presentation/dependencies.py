@@ -3,6 +3,9 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from src.application.use_cases.admin.refresh_screener_data import (
+    RefreshScreenerDataUseCase,
+)
 from src.application.use_cases.market import (
     GetMarketIndicatorsUseCase,
     GetMarketStatusUseCase,
@@ -24,6 +27,9 @@ from src.infrastructure.database.connection import get_db
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
 from src.infrastructure.gateways.yfinance_market_data_gateway import (
     YFinanceMarketDataGateway,
+)
+from src.infrastructure.repositories.postgres_refresh_job_repository import (
+    PostgresRefreshJobRepository,
 )
 from src.infrastructure.repositories.postgres_screener_repository import (
     PostgresScreenerRepository,
@@ -182,4 +188,34 @@ def get_performance_use_case(
     return GetPerformanceUseCase(
         trade_repository=trade_repo,
         performance_calculator=performance_calculator,
+    )
+
+
+# ============================================================
+# Admin Use Cases
+# ============================================================
+
+
+def get_refresh_screener_use_case(
+    db: Session = Depends(get_db),
+) -> RefreshScreenerDataUseCase:
+    """
+    RefreshScreenerDataUseCaseの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        RefreshScreenerDataUseCase: スクリーニングデータ更新ユースケース
+    """
+    job_repo = PostgresRefreshJobRepository(db)
+    stock_repo = PostgresScreenerRepository(db)
+    financial_gateway = YFinanceGateway()
+    rs_calculator = RSRatingCalculator()
+
+    return RefreshScreenerDataUseCase(
+        job_repository=job_repo,
+        stock_repository=stock_repo,
+        financial_gateway=financial_gateway,
+        rs_calculator=rs_calculator,
     )
