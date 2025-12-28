@@ -47,15 +47,18 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // filterのプリミティブ値を個別に抽出して依存配列に使用（オブジェクト参照の問題を回避）
+  const { status, limit, offset } = filter;
+
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
       const params = new URLSearchParams();
-      if (filter.status) params.append("status", filter.status);
-      if (filter.limit) params.append("limit", filter.limit.toString());
-      if (filter.offset) params.append("offset", filter.offset.toString());
+      if (status) params.append("status", status);
+      if (limit) params.append("limit", limit.toString());
+      if (offset) params.append("offset", offset.toString());
 
       const queryString = params.toString();
       const endpoint = queryString ? `/api/watchlist?${queryString}` : "/api/watchlist";
@@ -73,7 +76,7 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
     } finally {
       setIsLoading(false);
     }
-  }, [filter]);
+  }, [status, limit, offset]);
 
   useEffect(() => {
     fetchData();

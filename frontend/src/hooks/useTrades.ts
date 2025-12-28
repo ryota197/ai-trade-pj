@@ -50,17 +50,20 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
   const [isClosing, setIsClosing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // filterのプリミティブ値を個別に抽出して依存配列に使用（オブジェクト参照の問題を回避）
+  const { status, trade_type, symbol, limit, offset } = filter;
+
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
       const params = new URLSearchParams();
-      if (filter.status) params.append("status", filter.status);
-      if (filter.trade_type) params.append("trade_type", filter.trade_type);
-      if (filter.symbol) params.append("symbol", filter.symbol);
-      if (filter.limit) params.append("limit", filter.limit.toString());
-      if (filter.offset) params.append("offset", filter.offset.toString());
+      if (status) params.append("status", status);
+      if (trade_type) params.append("trade_type", trade_type);
+      if (symbol) params.append("symbol", symbol);
+      if (limit) params.append("limit", limit.toString());
+      if (offset) params.append("offset", offset.toString());
 
       const queryString = params.toString();
       const endpoint = queryString ? `/api/trades?${queryString}` : "/api/trades";
@@ -78,7 +81,7 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
     } finally {
       setIsLoading(false);
     }
-  }, [filter]);
+  }, [status, trade_type, symbol, limit, offset]);
 
   const fetchPositions = useCallback(async () => {
     try {
