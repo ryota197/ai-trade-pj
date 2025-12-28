@@ -291,7 +291,7 @@ created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
 | 問題 | BFFパターン導入により中間層として冗長 |
 | 影響 | 不要なコード層 |
 | 対策 | Hooks から直接 fetch を呼び出し、api.ts を削除 |
-| 状態 | 🟢 計画済み（Phase 6） |
+| 状態 | ✅ 対応完了（Phase 6） |
 
 参照: [BFFリファクタリング計画](./refactoring/frontend-api-bff.md)
 

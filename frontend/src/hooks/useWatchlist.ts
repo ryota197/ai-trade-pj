@@ -1,12 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  getWatchlist,
-  addToWatchlist,
-  updateWatchlistItem,
-  removeFromWatchlist,
-} from "@/lib/api";
 import type {
   WatchlistResponse,
   WatchlistItem,
@@ -14,6 +8,7 @@ import type {
   UpdateWatchlistRequest,
   WatchlistFilter,
 } from "@/types/portfolio";
+import type { ApiResponse } from "@/types/api";
 
 interface UseWatchlistResult {
   /** ウォッチリストデータ */
@@ -56,7 +51,18 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await getWatchlist(filter);
+
+      const params = new URLSearchParams();
+      if (filter.status) params.append("status", filter.status);
+      if (filter.limit) params.append("limit", filter.limit.toString());
+      if (filter.offset) params.append("offset", filter.offset.toString());
+
+      const queryString = params.toString();
+      const endpoint = queryString ? `/api/watchlist?${queryString}` : "/api/watchlist";
+
+      const res = await fetch(endpoint, { cache: "no-store" });
+      const response: ApiResponse<WatchlistResponse> = await res.json();
+
       if (response.success && response.data) {
         setData(response.data);
       } else {
@@ -78,7 +84,14 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
       try {
         setIsAdding(true);
         setError(null);
-        const response = await addToWatchlist(request);
+
+        const res = await fetch("/api/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const response: ApiResponse<WatchlistItem> = await res.json();
+
         if (response.success && response.data) {
           await fetchData(); // リストを再取得
           return response.data;
@@ -103,7 +116,14 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
       try {
         setIsUpdating(true);
         setError(null);
-        const response = await updateWatchlistItem(symbol, request);
+
+        const res = await fetch(`/api/watchlist/${symbol}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const response: ApiResponse<WatchlistItem> = await res.json();
+
         if (response.success && response.data) {
           await fetchData(); // リストを再取得
           return response.data;
@@ -125,7 +145,12 @@ export function useWatchlist(filter: WatchlistFilter = {}): UseWatchlistResult {
       try {
         setIsDeleting(true);
         setError(null);
-        const response = await removeFromWatchlist(symbol);
+
+        const res = await fetch(`/api/watchlist/${symbol}`, {
+          method: "DELETE",
+        });
+        const response: ApiResponse<{ message: string }> = await res.json();
+
         if (response.success) {
           await fetchData(); // リストを再取得
           return true;

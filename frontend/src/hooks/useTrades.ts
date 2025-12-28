@@ -1,13 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  getTrades,
-  getOpenPositions,
-  openTrade,
-  closeTrade,
-  cancelTrade,
-} from "@/lib/api";
 import type {
   TradeListResponse,
   Trade,
@@ -16,6 +9,7 @@ import type {
   CloseTradeRequest,
   TradeFilter,
 } from "@/types/portfolio";
+import type { ApiResponse } from "@/types/api";
 
 interface UseTradesResult {
   /** トレードデータ */
@@ -60,7 +54,20 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await getTrades(filter);
+
+      const params = new URLSearchParams();
+      if (filter.status) params.append("status", filter.status);
+      if (filter.trade_type) params.append("trade_type", filter.trade_type);
+      if (filter.symbol) params.append("symbol", filter.symbol);
+      if (filter.limit) params.append("limit", filter.limit.toString());
+      if (filter.offset) params.append("offset", filter.offset.toString());
+
+      const queryString = params.toString();
+      const endpoint = queryString ? `/api/trades?${queryString}` : "/api/trades";
+
+      const res = await fetch(endpoint, { cache: "no-store" });
+      const response: ApiResponse<TradeListResponse> = await res.json();
+
       if (response.success && response.data) {
         setData(response.data);
       } else {
@@ -75,9 +82,27 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
 
   const fetchPositions = useCallback(async () => {
     try {
-      const response = await getOpenPositions();
+      const res = await fetch("/api/trades?status=open", { cache: "no-store" });
+      const response: ApiResponse<TradeListResponse> = await res.json();
+
       if (response.success && response.data) {
-        setPositions(response.data);
+        // TradeListResponse から OpenPosition[] への変換
+        const openPositions: OpenPosition[] = response.data.trades.map((trade) => ({
+          id: trade.id,
+          symbol: trade.symbol,
+          trade_type: trade.trade_type,
+          quantity: trade.quantity,
+          entry_price: trade.entry_price,
+          entry_date: trade.entry_date,
+          stop_loss_price: trade.stop_loss_price,
+          target_price: trade.target_price,
+          position_value: trade.position_value,
+          holding_days: trade.holding_days ?? 0,
+          current_price: null, // 現在価格はバックエンドから別途取得が必要
+          unrealized_pnl: trade.profit_loss, // オープントレードの場合は未実現損益
+          unrealized_return_percent: trade.return_percent, // オープントレードの場合は未実現リターン
+        }));
+        setPositions(openPositions);
       }
     } catch (e) {
       console.error("Failed to fetch positions:", e);
@@ -94,7 +119,14 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
       try {
         setIsCreating(true);
         setError(null);
-        const response = await openTrade(request);
+
+        const res = await fetch("/api/trades", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const response: ApiResponse<Trade> = await res.json();
+
         if (response.success && response.data) {
           await fetchData();
           await fetchPositions();
@@ -120,7 +152,14 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
       try {
         setIsClosing(true);
         setError(null);
-        const response = await closeTrade(tradeId, request);
+
+        const res = await fetch(`/api/trades/${tradeId}/close`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const response: ApiResponse<Trade> = await res.json();
+
         if (response.success && response.data) {
           await fetchData();
           await fetchPositions();
@@ -143,7 +182,12 @@ export function useTrades(filter: TradeFilter = {}): UseTradesResult {
       try {
         setIsCancelling(true);
         setError(null);
-        const response = await cancelTrade(tradeId);
+
+        const res = await fetch(`/api/trades/${tradeId}`, {
+          method: "DELETE",
+        });
+        const response: ApiResponse<{ message: string }> = await res.json();
+
         if (response.success) {
           await fetchData();
           await fetchPositions();

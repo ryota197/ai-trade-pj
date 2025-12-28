@@ -1,8 +1,18 @@
-import { getHealth } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { StatusCard } from "@/components/ui/StatusCard";
 import { ModuleCard } from "@/components/ui/ModuleCard";
 import { MarketDashboard } from "@/components/market";
+import type { ApiResponse, HealthResponse } from "@/types/api";
+
+/**
+ * ヘルスチェック取得
+ * Note: サーバーコンポーネントから直接バックエンドを呼び出す（開発用）
+ */
+async function getHealth(): Promise<ApiResponse<HealthResponse>> {
+  const backendUrl = process.env.BACKEND_URL || "http://localhost:8000/api";
+  const response = await fetch(`${backendUrl}/health`, { cache: "no-store" });
+  return response.json();
+}
 
 export default async function Home() {
   let healthStatus = { status: "unknown", database: "unknown" };

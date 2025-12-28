@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getQuote, getPriceHistory, getFinancials } from "@/lib/api";
 import type { PriceBar, FinancialsResponse } from "@/types/stock";
+import type { ApiResponse } from "@/types/api";
 
 /** 株価クォートデータ */
 export interface QuoteData {
@@ -16,6 +16,14 @@ export interface QuoteData {
   week_52_high: number;
   week_52_low: number;
   timestamp: string;
+}
+
+/** 株価履歴レスポンス */
+interface PriceHistoryResponse {
+  symbol: string;
+  period: string;
+  interval: string;
+  data: PriceBar[];
 }
 
 /** useStockDataの戻り値 */
@@ -52,9 +60,13 @@ export function useStockData(
     try {
       // 並列でデータ取得
       const [quoteRes, historyRes, financialsRes] = await Promise.all([
-        getQuote(symbol),
-        getPriceHistory(symbol, period, "1d"),
-        getFinancials(symbol).catch(() => null), // 財務データは取得失敗しても続行
+        fetch(`/api/data/quote/${symbol}`, { cache: "no-store" })
+          .then((r) => r.json() as Promise<ApiResponse<QuoteData>>),
+        fetch(`/api/data/history/${symbol}?period=${period}&interval=1d`, { cache: "no-store" })
+          .then((r) => r.json() as Promise<ApiResponse<PriceHistoryResponse>>),
+        fetch(`/api/data/financials/${symbol}`, { cache: "no-store" })
+          .then((r) => r.json() as Promise<ApiResponse<FinancialsResponse>>)
+          .catch(() => null), // 財務データは取得失敗しても続行
       ]);
 
       if (quoteRes.success && quoteRes.data) {

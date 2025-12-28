@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getMarketStatus } from "@/lib/api";
 import type { MarketStatusResponse } from "@/types/market";
+import type { ApiResponse } from "@/types/api";
 
 interface UseMarketStatusResult {
   data: MarketStatusResponse | null;
@@ -25,7 +25,10 @@ export function useMarketStatus(autoRefresh = 0): UseMarketStatusResult {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await getMarketStatus();
+
+      const res = await fetch("/api/market/status", { cache: "no-store" });
+      const response: ApiResponse<MarketStatusResponse> = await res.json();
+
       if (response.success) {
         setData(response.data);
       } else {
