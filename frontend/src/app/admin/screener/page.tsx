@@ -1,8 +1,9 @@
 "use client";
 
-import { Header } from "@/components/layout";
-import { RefreshPanel } from "@/components/admin";
+import { Header } from "@/components/layout/Header";
 import { Shield } from "lucide-react";
+
+import { RefreshPanel } from "./_components/RefreshPanel";
 
 /**
  * 管理画面 - スクリーナーデータ更新ページ

@@ -1,8 +1,9 @@
 import { Header } from "@/components/layout/Header";
 import { StatusCard } from "@/components/ui/StatusCard";
 import { ModuleCard } from "@/components/ui/ModuleCard";
-import { MarketDashboard } from "@/components/market";
 import type { ApiResponse, HealthResponse } from "@/types/api";
+
+import { MarketDashboard } from "./_components/MarketDashboard";
 
 /**
  * ヘルスチェック取得

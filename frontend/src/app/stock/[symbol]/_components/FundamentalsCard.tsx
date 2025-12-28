@@ -10,7 +10,7 @@ import {
   Target,
   Building2,
 } from "lucide-react";
-import type { QuoteData } from "@/hooks/useStockData";
+import type { QuoteData } from "../_hooks/useStockData";
 import type { FinancialsResponse } from "@/types/stock";
 
 interface FundamentalsCardProps {

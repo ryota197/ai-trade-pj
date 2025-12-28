@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { ProgressBar } from "./ProgressBar";
 import { ErrorList } from "./ErrorList";
-import { useAdminRefresh } from "@/hooks/useAdminRefresh";
+import { useAdminRefresh } from "../_hooks/useAdminRefresh";
 
 type SymbolSource = "sp500" | "nasdaq100";
 

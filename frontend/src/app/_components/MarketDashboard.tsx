@@ -1,9 +1,10 @@
 "use client";
 
-import { useMarketStatus } from "@/hooks/useMarketStatus";
+import { Button } from "@/components/ui/button";
+
+import { useMarketStatus } from "../_hooks/useMarketStatus";
 import { MarketStatus } from "./MarketStatus";
 import { IndicatorCard } from "./IndicatorCard";
-import { Button } from "@/components/ui/button";
 
 /**
  * マーケットダッシュボード
