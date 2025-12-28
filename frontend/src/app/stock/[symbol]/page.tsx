@@ -17,7 +17,7 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
   const { symbol } = use(params);
   const upperSymbol = symbol.toUpperCase();
 
-  const { quote, priceHistory, financials, isLoading, error, refetch } =
+  const { quote, priceHistory, financials, canslimScore, isLoading, error, refetch } =
     useStockData(upperSymbol);
 
   if (error) {
@@ -117,7 +117,7 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
 
       {/* CAN-SLIMスコア（フルワイド） */}
       <div className="mt-6">
-        <CANSLIMScoreCard score={null} isLoading={isLoading} />
+        <CANSLIMScoreCard score={canslimScore} isLoading={isLoading} />
       </div>
     </div>
   );

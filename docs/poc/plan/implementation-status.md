@@ -13,7 +13,7 @@
 |-------|------|------|----------|
 | Phase 1 | 基盤構築 | ✅ 完了 | なし |
 | Phase 2 | Market Module | ⚠️ 一部残 | バッチ処理（将来対応） |
-| Phase 3 | Screener Module | ⚠️ 一部残 | 詳細ページCAN-SLIMスコア、管理者機能 |
+| Phase 3 | Screener Module | ⚠️ 一部残 | 管理者機能 |
 | Phase 4 | Portfolio Module | ✅ 完了 | なし |
 
 ---
@@ -85,7 +85,7 @@
 | 問題 | `<CANSLIMScoreCard score={null} />` で常にnullを渡している |
 | 原因 | `useStockData` hookがCAN-SLIMスコアを取得していない |
 | 優先度 | 高（機能不全） |
-| 状態 | 🔴 未対応 |
+| 状態 | ✅ 対応完了 |
 
 **対策案**:
 1. `useStockData` を拡張して `/api/screener/stock/{symbol}` からCAN-SLIMスコアも取得
@@ -178,7 +178,7 @@ export default function PortfolioPage() {
 | ID | 内容 | 工数 | 状態 |
 |----|------|------|------|
 | PENDING-004 | PortfolioページにHeader追加 | 小 | ✅ 完了 |
-| PENDING-002 | 個別銘柄ページでCAN-SLIMスコア取得・表示 | 中 | 🔴 未対応 |
+| PENDING-002 | 個別銘柄ページでCAN-SLIMスコア取得・表示 | 中 | ✅ 完了 |
 
 ### 中優先度（将来対応・任意）
 
