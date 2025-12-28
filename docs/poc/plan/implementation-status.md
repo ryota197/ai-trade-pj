@@ -14,7 +14,7 @@
 | Phase 1 | 基盤構築 | ✅ 完了 | なし |
 | Phase 2 | Market Module | ⚠️ 一部残 | バッチ処理（将来対応） |
 | Phase 3 | Screener Module | ⚠️ 一部残 | 詳細ページCAN-SLIMスコア、管理者機能 |
-| Phase 4 | Portfolio Module | ⚠️ 一部残 | Headerなし |
+| Phase 4 | Portfolio Module | ✅ 完了 | なし |
 
 ---
 
@@ -148,7 +148,7 @@ const { quote, priceHistory, financials, canslimScore } = useStockData(symbol);
 | 問題 | 他のページ（`/`, `/screener`, `/stock/*`）にはHeaderがあるが、Portfolioにはない |
 | 影響 | ナビゲーション体験の不整合。ホームに戻るリンクがない |
 | 優先度 | 高（UX問題） |
-| 状態 | 🔴 未対応 |
+| 状態 | ✅ 対応完了 |
 
 **対策**:
 ```tsx
@@ -175,10 +175,10 @@ export default function PortfolioPage() {
 
 ### 高優先度（機能・UXに直接影響）
 
-| ID | 内容 | 工数 |
-|----|------|------|
-| PENDING-004 | PortfolioページにHeader追加 | 小 |
-| PENDING-002 | 個別銘柄ページでCAN-SLIMスコア取得・表示 | 中 |
+| ID | 内容 | 工数 | 状態 |
+|----|------|------|------|
+| PENDING-004 | PortfolioページにHeader追加 | 小 | ✅ 完了 |
+| PENDING-002 | 個別銘柄ページでCAN-SLIMスコア取得・表示 | 中 | 🔴 未対応 |
 
 ### 中優先度（将来対応・任意）
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 const navLinks = [
   { href: "/", label: "ダッシュボード" },
   { href: "/screener", label: "スクリーナー" },
+  { href: "/portfolio", label: "ポートフォリオ" },
 ];
 
 /**

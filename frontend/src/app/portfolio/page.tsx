@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Header } from "@/components/layout";
 import {
   WatchlistTable,
   AddToWatchlistButton,
@@ -40,7 +41,9 @@ export default function PortfolioPage() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-background">
+      <Header />
+      <main className="mx-auto max-w-7xl px-4 py-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
@@ -167,6 +170,7 @@ export default function PortfolioPage() {
           )}
         </div>
       )}
+      </main>
     </div>
   );
 }
