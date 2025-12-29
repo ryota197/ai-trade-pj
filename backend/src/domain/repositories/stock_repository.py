@@ -125,3 +125,51 @@ class StockRepository(ABC):
             bool: 削除成功したらTrue
         """
         pass
+
+    # ----- Job 2, 3 用メソッド -----
+
+    @abstractmethod
+    async def get_all_with_relative_strength(self) -> list[tuple[str, float]]:
+        """
+        relative_strengthを持つ全銘柄を取得（Job 2用）
+
+        Returns:
+            list[tuple[str, float]]: (symbol, relative_strength) のリスト
+        """
+        pass
+
+    @abstractmethod
+    async def bulk_update_rs_rating(self, updates: list[tuple[str, int]]) -> int:
+        """
+        rs_ratingを一括更新（Job 2用）
+
+        Args:
+            updates: (symbol, rs_rating) のリスト
+
+        Returns:
+            int: 更新件数
+        """
+        pass
+
+    @abstractmethod
+    async def get_all_for_canslim(self) -> list[Stock]:
+        """
+        CAN-SLIMスコア計算に必要な全銘柄を取得（Job 3用）
+
+        Returns:
+            list[Stock]: rs_ratingが設定されている銘柄のリスト
+        """
+        pass
+
+    @abstractmethod
+    async def bulk_update_canslim_score(self, updates: list[tuple[str, int]]) -> int:
+        """
+        canslim_scoreを一括更新（Job 3用）
+
+        Args:
+            updates: (symbol, canslim_score) のリスト
+
+        Returns:
+            int: 更新件数
+        """
+        pass

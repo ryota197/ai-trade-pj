@@ -3,8 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.domain.value_objects.canslim_score import CANSLIMScore
-
 
 @dataclass(frozen=True)
 class Stock:
@@ -16,33 +14,46 @@ class Stock:
     """
 
     symbol: str
-    name: str
-    price: float
-    change_percent: float
-    volume: int
-    avg_volume: int
-    market_cap: float | None
-    pe_ratio: float | None
-    week_52_high: float
-    week_52_low: float
+    name: str | None
+    industry: str | None
+    price: float | None
+    change_percent: float | None
+    volume: int | None
+    avg_volume_50d: int | None
+    market_cap: int | None
+    week_52_high: float | None
+    week_52_low: float | None
+
+    # CAN-SLIM指標
     eps_growth_quarterly: float | None  # C - Current Quarterly Earnings
     eps_growth_annual: float | None  # A - Annual Earnings
-    rs_rating: int  # L - Leader (Relative Strength Rating: 1-99)
     institutional_ownership: float | None  # I - Institutional Sponsorship
-    canslim_score: CANSLIMScore | None
+
+    # RS関連（Job 1, 2 で段階的に設定）
+    relative_strength: float | None  # S&P500比の相対強度（生値）- Job 1で保存
+    rs_rating: int | None  # L - Leader (RS Rating: 1-99) - Job 2で更新
+
+    # CAN-SLIMスコア（Job 3 で設定）
+    canslim_score: int | None  # 0-100
+
+    # メタデータ
     updated_at: datetime
 
     @property
     def volume_ratio(self) -> float:
         """S - Supply and Demand: 出来高倍率を計算"""
-        if self.avg_volume == 0:
+        if self.avg_volume_50d is None or self.avg_volume_50d == 0:
             return 0.0
-        return self.volume / self.avg_volume
+        if self.volume is None:
+            return 0.0
+        return self.volume / self.avg_volume_50d
 
     @property
     def distance_from_52w_high(self) -> float:
         """N - New High: 52週高値からの乖離率（%）"""
-        if self.week_52_high == 0:
+        if self.week_52_high is None or self.week_52_high == 0:
+            return 0.0
+        if self.price is None:
             return 0.0
         return ((self.week_52_high - self.price) / self.week_52_high) * 100
 
@@ -70,6 +81,8 @@ class Stock:
 
     def is_leader(self, threshold: int = 80) -> bool:
         """RS Ratingがリーダー水準か"""
+        if self.rs_rating is None:
+            return False
         return self.rs_rating >= threshold
 
 
@@ -82,8 +95,8 @@ class StockSummary:
     """
 
     symbol: str
-    name: str
-    price: float
-    change_percent: float
-    rs_rating: int
-    canslim_total_score: int
+    name: str | None
+    price: float | None
+    change_percent: float | None
+    rs_rating: int | None
+    canslim_score: int | None

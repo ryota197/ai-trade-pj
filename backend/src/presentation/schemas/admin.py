@@ -8,8 +8,14 @@ from pydantic import BaseModel, Field
 class RefreshJobRequest(BaseModel):
     """リフレッシュジョブ開始リクエスト"""
 
-    symbols: list[str] = Field(..., description="更新する銘柄シンボルのリスト")
-    source: str = Field("custom", description="データソース: sp500, nasdaq100, custom")
+    symbols: list[str] = Field(
+        default_factory=list,
+        description="更新する銘柄シンボルのリスト（空の場合はsourceから取得）",
+    )
+    source: str = Field(
+        "nasdaq100",
+        description="データソース: sp500, nasdaq100（symbolsが空の場合に使用）",
+    )
 
 
 class RefreshJobResponse(BaseModel):

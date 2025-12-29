@@ -13,49 +13,352 @@
 2. **独立性**: 各銘柄の処理が他銘柄に影響しない
 3. **再実行性**: 失敗時に該当ジョブのみ再実行可能
 4. **正確性**: RS Ratingは常にDB全銘柄でパーセンタイル計算
+5. **効率性**: ベンチマークデータは1日1回取得し再利用
+
+---
+
+## DBスキーマ（正規化設計）
+
+### 設計方針
+
+Stock エンティティを **更新頻度** と **責務** で正規化し、4テーブルに分離する。
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            テーブル構成                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  stocks (マスター)          stock_prices (日次)       stock_metrics (計算)  │
+│  ┌────────────────┐        ┌─────────────────┐       ┌─────────────────┐   │
+│  │ symbol (PK)    │◄───────┤ symbol (FK)     │       │ symbol (FK)     │   │
+│  │ name           │        │ price           │       │ eps_growth_q    │   │
+│  │ industry       │        │ change_percent  │       │ eps_growth_a    │   │
+│  │ created_at     │        │ volume          │       │ inst_ownership  │   │
+│  └────────────────┘        │ avg_volume_50d  │       │ relative_strength│  │
+│                            │ market_cap      │       │ rs_rating       │   │
+│                            │ week_52_high    │       │ canslim_score   │   │
+│                            │ week_52_low     │       │ calculated_at   │   │
+│                            │ recorded_at     │       └─────────────────┘   │
+│                            └─────────────────┘                              │
+│                                                                             │
+│  market_benchmarks (ベンチマーク)                                            │
+│  ┌─────────────────────────┐                                                │
+│  │ id (PK)                 │                                                │
+│  │ symbol (^GSPC, ^NDX)    │                                                │
+│  │ performance_1y          │                                                │
+│  │ performance_6m          │                                                │
+│  │ performance_3m          │                                                │
+│  │ recorded_at             │                                                │
+│  └─────────────────────────┘                                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### テーブル定義
+
+#### stocks（銘柄マスター）
+
+```sql
+CREATE TABLE stocks (
+    symbol VARCHAR(10) PRIMARY KEY,
+    name VARCHAR(100),
+    industry VARCHAR(50),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+- 更新頻度: 稀（企業情報変更時のみ）
+- 用途: 銘柄の基本情報
+
+#### stock_prices（価格スナップショット）
+
+```sql
+CREATE TABLE stock_prices (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL REFERENCES stocks(symbol),
+    price DECIMAL(10,2),
+    change_percent DECIMAL(10,2),
+    volume BIGINT,
+    avg_volume_50d BIGINT,
+    market_cap BIGINT,
+    week_52_high DECIMAL(10,2),
+    week_52_low DECIMAL(10,2),
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT unique_stock_price_per_day
+        UNIQUE (symbol, (recorded_at::date))
+);
+
+CREATE INDEX idx_stock_prices_symbol_date
+    ON stock_prices(symbol, recorded_at DESC);
+```
+
+- 更新頻度: 日次（市場終了後）
+- 用途: 株価・出来高のスナップショット
+- 履歴保持: 日次で蓄積可能
+
+#### stock_metrics（計算指標）
+
+```sql
+CREATE TABLE stock_metrics (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL REFERENCES stocks(symbol),
+
+    -- ファンダメンタル（Job 1 で取得）
+    eps_growth_quarterly DECIMAL(10,2),
+    eps_growth_annual DECIMAL(10,2),
+    institutional_ownership DECIMAL(10,2),
+
+    -- RS関連（Job 0, 1, 2 で段階的に設定）
+    relative_strength DECIMAL(10,4),  -- Job 1: S&P500比の生値
+    rs_rating INTEGER,                 -- Job 2: パーセンタイル (1-99)
+
+    -- CAN-SLIMスコア（Job 3 で設定）
+    canslim_score INTEGER,             -- 0-100
+
+    calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_rs_rating
+        CHECK (rs_rating IS NULL OR (rs_rating >= 1 AND rs_rating <= 99)),
+    CONSTRAINT valid_canslim_score
+        CHECK (canslim_score IS NULL OR (canslim_score >= 0 AND canslim_score <= 100)),
+    CONSTRAINT unique_stock_metrics_per_day
+        UNIQUE (symbol, (calculated_at::date))
+);
+
+CREATE INDEX idx_stock_metrics_symbol_date
+    ON stock_metrics(symbol, calculated_at DESC);
+CREATE INDEX idx_stock_metrics_rs_rating
+    ON stock_metrics(rs_rating DESC) WHERE rs_rating IS NOT NULL;
+CREATE INDEX idx_stock_metrics_canslim
+    ON stock_metrics(canslim_score DESC) WHERE canslim_score IS NOT NULL;
+```
+
+- 更新頻度: Job実行時
+- 用途: CAN-SLIM関連の計算指標
+- 履歴保持: 計算履歴として蓄積可能
+
+#### market_benchmarks（市場ベンチマーク）
+
+```sql
+CREATE TABLE market_benchmarks (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,  -- "^GSPC" (S&P500), "^NDX" (NASDAQ100)
+    performance_1y DECIMAL(10,4),
+    performance_6m DECIMAL(10,4),
+    performance_3m DECIMAL(10,4),
+    performance_1m DECIMAL(10,4),
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT unique_benchmark_per_day
+        UNIQUE (symbol, (recorded_at::date))
+);
+
+CREATE INDEX idx_market_benchmarks_symbol_date
+    ON market_benchmarks(symbol, recorded_at DESC);
+```
+
+- 更新頻度: 1日1回（市場終了後）
+- 用途: RS計算のベンチマーク
+- Job 0 で取得、Job 1 で参照
+
+#### job_executions（ジョブ実行履歴）
+
+```sql
+CREATE TABLE job_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_type VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    started_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    result JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_job_status CHECK (status IN ('completed', 'failed'))
+);
+
+CREATE INDEX idx_job_executions_type_created
+    ON job_executions(job_type, created_at DESC);
+```
 
 ---
 
 ## アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        ジョブ分離アーキテクチャ                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  【Job 1】データ収集ジョブ (CollectStockDataJob)                         │
-│    ─────────────────────────────────────────                            │
-│    目的: 外部APIからデータを取得し、DBに保存                              │
-│    特徴:                                                                │
-│      - 各銘柄を独立して処理                                              │
-│      - relative_strength を計算して保存                                  │
-│      - rs_rating, canslim_score は計算しない（後続ジョブに委譲）          │
-│    所要時間: 数分〜数十分（銘柄数・API速度に依存）                        │
-│                                                                         │
-│                              ↓ 完了後に自動実行                          │
-│                                                                         │
-│  【Job 2】RS Rating 再計算ジョブ (RecalculateRSRatingJob)                │
-│    ─────────────────────────────────────────                            │
-│    目的: DB内の全銘柄でパーセンタイルランキングを計算                      │
-│    特徴:                                                                │
-│      - 外部API呼び出しなし                                               │
-│      - DB内の relative_strength を使用                                   │
-│      - 全銘柄の rs_rating を一括更新                                     │
-│    所要時間: 数秒                                                        │
-│                                                                         │
-│                              ↓ 完了後に自動実行                          │
-│                                                                         │
-│  【Job 3】CAN-SLIMスコア再計算ジョブ (RecalculateCANSLIMScoreJob)         │
-│    ─────────────────────────────────────────                            │
-│    目的: DB内のデータを元にCAN-SLIMスコアを計算                           │
-│    特徴:                                                                │
-│      - 外部API呼び出しなし                                               │
-│      - rs_rating 確定後に実行                                            │
-│      - 全銘柄の canslim_score を一括更新                                 │
-│    所要時間: 数秒                                                        │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ジョブ分離アーキテクチャ                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  【Job 0】ベンチマーク収集ジョブ (CollectBenchmarksJob)        ← 1日1回     │
+│    ─────────────────────────────────────────                                │
+│    目的: S&P500/NASDAQ100のパフォーマンスを取得し、DBに保存                  │
+│    特徴:                                                                    │
+│      - 外部API呼び出し（市場指数のみ）                                       │
+│      - market_benchmarks テーブルに保存                                     │
+│      - 1日1回で十分（市場終了後）                                            │
+│    所要時間: 数秒                                                           │
+│                                                                             │
+│                              ↓ ベンチマーク準備完了                          │
+│                                                                             │
+│  【Job 1】データ収集ジョブ (CollectStockDataJob)               ← 必要時     │
+│    ─────────────────────────────────────────                                │
+│    目的: 個別銘柄のデータを取得し、relative_strength を計算                  │
+│    特徴:                                                                    │
+│      - 各銘柄を独立して処理                                                  │
+│      - ベンチマークは **DBから参照**（API呼び出しなし）                       │
+│      - rs_rating, canslim_score は計算しない（後続ジョブに委譲）              │
+│    所要時間: 数分〜数十分（銘柄数に依存）                                     │
+│                                                                             │
+│                              ↓ 完了後に自動実行                              │
+│                                                                             │
+│  【Job 2】RS Rating 再計算ジョブ (RecalculateRSRatingJob)                   │
+│    ─────────────────────────────────────────                                │
+│    目的: DB内の全銘柄でパーセンタイルランキングを計算                         │
+│    特徴:                                                                    │
+│      - 外部API呼び出しなし                                                   │
+│      - DB内の relative_strength を使用                                      │
+│      - 全銘柄の rs_rating を一括更新                                        │
+│    所要時間: 数秒                                                           │
+│                                                                             │
+│                              ↓ 完了後に自動実行                              │
+│                                                                             │
+│  【Job 3】CAN-SLIMスコア再計算ジョブ (RecalculateCANSLIMScoreJob)            │
+│    ─────────────────────────────────────────                                │
+│    目的: DB内のデータを元にCAN-SLIMスコアを計算                              │
+│    特徴:                                                                    │
+│      - 外部API呼び出しなし                                                   │
+│      - rs_rating 確定後に実行                                               │
+│      - 全銘柄の canslim_score を一括更新                                    │
+│    所要時間: 数秒                                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## タイムチャート
+
+### 日次更新フロー
+
+```
+市場終了後 (16:00 ET / 翌 06:00 JST)
+│
+▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Job 0: CollectBenchmarks (数秒)                                            │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. S&P500 (^GSPC) の1年パフォーマンス取得                               │ │
+│ │ 2. NASDAQ100 (^NDX) の1年パフォーマンス取得                             │ │
+│ │ 3. market_benchmarks テーブルに保存                                     │ │
+│ └────────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
+│
+▼ ベンチマークがDBに保存済み
+│
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Job 1: CollectStockData (数分〜数十分)                                      │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. DBからベンチマーク取得 (S&P500 performance_1y)     ← API呼び出しなし │ │
+│ │ 2. 銘柄ループ:                                                         │ │
+│ │    ├─ get_quote(symbol)                                                │ │
+│ │    ├─ get_financial_metrics(symbol)                                    │ │
+│ │    ├─ get_price_history(symbol, 1y)                                    │ │
+│ │    ├─ relative_strength = stock_perf / benchmark_perf * 100            │ │
+│ │    └─ stocks, stock_prices, stock_metrics に保存                       │ │
+│ └────────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
+│
+▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Job 2: RecalculateRSRating (数秒)                                          │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. 全銘柄の relative_strength 取得                                      │ │
+│ │ 2. パーセンタイル計算 → rs_rating (1-99)                                │ │
+│ │ 3. stock_metrics.rs_rating を一括更新                                   │ │
+│ └────────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
+│
+▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Job 3: RecalculateCANSLIM (数秒)                                           │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. 全銘柄のスコア計算に必要なデータ取得                                  │ │
+│ │ 2. CAN-SLIMスコア計算 (0-100)                                           │ │
+│ │ 3. stock_metrics.canslim_score を一括更新                               │ │
+│ └────────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 効率化のポイント
+
+```
+旧フロー（非効率）:
+┌──────────────────────────────────────────────────────────────────┐
+│ Job 1 実行ごとに S&P500 取得                                      │
+│                                                                  │
+│   Run 1: [S&P500取得] → 銘柄処理...                              │
+│   Run 2: [S&P500取得] → 銘柄処理...   ← 無駄なAPI呼び出し        │
+│   Run 3: [S&P500取得] → 銘柄処理...   ← 無駄なAPI呼び出し        │
+└──────────────────────────────────────────────────────────────────┘
+
+新フロー（効率的）:
+┌──────────────────────────────────────────────────────────────────┐
+│ Job 0 で1日1回取得、DBにキャッシュ                                │
+│                                                                  │
+│   Job 0: [S&P500取得] → DB保存 (1日1回)                          │
+│   Job 1 Run 1: [DB参照] → 銘柄処理...   ← API呼び出しなし        │
+│   Job 1 Run 2: [DB参照] → 銘柄処理...   ← API呼び出しなし        │
+│   Job 1 Run 3: [DB参照] → 銘柄処理...   ← API呼び出しなし        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Job 0: ベンチマーク収集ジョブ
+
+### 責務
+
+- 市場指数（S&P500, NASDAQ100）のパフォーマンスを取得
+- `market_benchmarks` テーブルに保存
+
+### 入力
+
+```python
+@dataclass
+class CollectBenchmarksInput:
+    indices: list[str] = field(default_factory=lambda: ["^GSPC", "^NDX"])
+```
+
+### 処理フロー
+
+```
+1. 対象指数ごとにループ
+   for index in ["^GSPC", "^NDX"]:
+     ├─ get_price_history(index, period="1y")
+     ├─ calculate_performance(history, periods=["1y", "6m", "3m", "1m"])
+     └─ UPSERT market_benchmarks
+
+2. 完了
+```
+
+### 出力
+
+```python
+@dataclass
+class CollectBenchmarksOutput:
+    indices_updated: int
+    benchmarks: dict[str, float]  # {"^GSPC": 25.3, "^NDX": 30.1}
+```
+
+### 実行タイミング
+
+- **推奨**: 1日1回（米国市場終了後）
+- **手動**: 管理者が明示的に実行可能
+- Job 1 より先に実行されている必要がある
 
 ---
 
@@ -63,9 +366,9 @@
 
 ### 責務
 
-- 外部API (yfinance) からデータを取得
-- `relative_strength` を計算
-- DBに保存
+- 個別銘柄のデータを外部APIから取得
+- `relative_strength` を計算（**DBのベンチマークを参照**）
+- 3テーブルに保存（stocks, stock_prices, stock_metrics）
 
 ### 入力
 
@@ -80,11 +383,11 @@ class CollectStockDataInput:
 
 ```
 1. ジョブ開始
-   └─ ステータス: pending → running
 
-2. S&P500 履歴取得（ベンチマーク）
-   └─ sp500_prices: list[float]
-   └─ benchmark_perf: PricePerformance
+2. DBからベンチマーク取得（API呼び出しなし）
+   └─ SELECT performance_1y FROM market_benchmarks
+      WHERE symbol = '^GSPC'
+      ORDER BY recorded_at DESC LIMIT 1
 
 3. 銘柄ごとにデータ収集
    for symbol in symbols:
@@ -92,26 +395,28 @@ class CollectStockDataInput:
      ├─ get_financial_metrics(symbol)
      ├─ get_price_history(symbol)
      ├─ calculate_relative_strength(stock_perf, benchmark_perf)
-     ├─ DB保存 (rs_rating=NULL, canslim_score=NULL)
+     ├─ UPSERT stocks (マスター)
+     ├─ INSERT stock_prices (価格スナップショット)
+     ├─ INSERT stock_metrics (rs_rating=NULL, canslim_score=NULL)
      └─ 進捗更新
 
 4. ジョブ完了
-   └─ ステータス: running → completed
    └─ 後続ジョブをトリガー (Job 2)
 ```
 
 ### 保存データ
 
-| カラム | 値 |
-|-------|-----|
-| symbol | "AAPL" |
-| price, volume, ... | APIから取得した値 |
-| relative_strength | 計算値 (例: 105.2) |
-| rs_rating | NULL (Job 2で計算) |
-| canslim_score | NULL (Job 3で計算) |
+| テーブル | カラム | 値 |
+|---------|-------|-----|
+| stocks | symbol, name, industry | マスター情報 |
+| stock_prices | price, volume, ... | APIから取得した値 |
+| stock_metrics | relative_strength | 計算値 (例: 105.2) |
+| stock_metrics | rs_rating | NULL (Job 2で計算) |
+| stock_metrics | canslim_score | NULL (Job 3で計算) |
 
 ### エラーハンドリング
 
+- ベンチマークが存在しない場合: Job 0 の実行を促すエラー
 - 銘柄ごとにtry-catch
 - 失敗した銘柄はスキップし、エラーリストに記録
 - 他銘柄の処理は継続
@@ -124,7 +429,7 @@ class CollectStockDataInput:
 
 - DB内の全銘柄の `relative_strength` を取得
 - パーセンタイルランキングを計算
-- `rs_rating` を一括更新
+- `stock_metrics.rs_rating` を一括更新
 
 ### 入力
 
@@ -135,8 +440,9 @@ class CollectStockDataInput:
 ```
 1. DB から全銘柄の relative_strength を取得
    SELECT symbol, relative_strength
-   FROM stocks
+   FROM stock_metrics
    WHERE relative_strength IS NOT NULL
+     AND calculated_at::date = CURRENT_DATE
 
 2. パーセンタイル計算
    sorted_rs = sorted(all_relative_strengths)
@@ -146,7 +452,8 @@ class CollectStockDataInput:
      rs_rating = clamp(percentile, 1, 99)
 
 3. 一括更新
-   UPDATE stocks SET rs_rating = ? WHERE symbol = ?
+   UPDATE stock_metrics SET rs_rating = ?
+   WHERE symbol = ? AND calculated_at::date = CURRENT_DATE
 
 4. 後続ジョブをトリガー (Job 3)
 ```
@@ -163,7 +470,7 @@ class CollectStockDataInput:
 ### 責務
 
 - DB内のデータを元にCAN-SLIMスコアを計算
-- `canslim_score` を一括更新
+- `stock_metrics.canslim_score` を一括更新
 
 ### 入力
 
@@ -173,61 +480,143 @@ class CollectStockDataInput:
 
 ```
 1. DB から全銘柄のスコア計算に必要なデータを取得
-   SELECT symbol, eps_growth_quarterly, eps_growth_annual,
-          week_52_high, price, volume, avg_volume,
-          rs_rating, institutional_ownership
-   FROM stocks
+   SELECT
+     sm.symbol,
+     sm.eps_growth_quarterly,
+     sm.eps_growth_annual,
+     sp.week_52_high,
+     sp.price,
+     sp.volume,
+     sp.avg_volume_50d,
+     sm.rs_rating,
+     sm.institutional_ownership
+   FROM stock_metrics sm
+   JOIN stock_prices sp ON sm.symbol = sp.symbol
+     AND sp.recorded_at::date = CURRENT_DATE
 
 2. 各銘柄のCAN-SLIMスコアを計算
    for stock in stocks:
-     distance_from_high = (week_52_high - price) / week_52_high * 100
-     volume_ratio = volume / avg_volume
-     canslim_score = CANSLIMScore.calculate(
-       eps_growth_quarterly,
-       eps_growth_annual,
-       distance_from_high,
-       volume_ratio,
-       rs_rating,
-       institutional_ownership
-     )
+     canslim_score = CANSLIMScore.calculate(...)
 
 3. 一括更新
-   UPDATE stocks SET canslim_score = ? WHERE symbol = ?
+   UPDATE stock_metrics SET canslim_score = ?
+   WHERE symbol = ? AND calculated_at::date = CURRENT_DATE
 ```
-
-### パフォーマンス
-
-- 外部API呼び出しなし
-- 500銘柄でも数秒で完了
 
 ---
 
-## DBスキーマ変更
+## Domain エンティティ設計
 
-### stocks テーブル
+### 正規化後のエンティティ
 
-```sql
--- 追加カラム
-ALTER TABLE stocks ADD COLUMN relative_strength DECIMAL(10, 4);
+```python
+@dataclass(frozen=True)
+class StockIdentity:
+    """銘柄マスター"""
+    symbol: str
+    name: str | None
+    industry: str | None
 
--- rs_rating, canslim_score は NULL 許容に変更
-ALTER TABLE stocks ALTER COLUMN rs_rating DROP NOT NULL;
-ALTER TABLE stocks ALTER COLUMN canslim_score DROP NOT NULL;
+
+@dataclass(frozen=True)
+class PriceSnapshot:
+    """価格スナップショット"""
+    symbol: str
+    price: float | None
+    change_percent: float | None
+    volume: int | None
+    avg_volume_50d: int | None
+    market_cap: int | None
+    week_52_high: float | None
+    week_52_low: float | None
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class StockMetrics:
+    """計算指標"""
+    symbol: str
+    eps_growth_quarterly: float | None
+    eps_growth_annual: float | None
+    institutional_ownership: float | None
+    relative_strength: float | None
+    rs_rating: int | None
+    canslim_score: int | None
+    calculated_at: datetime
+
+
+@dataclass(frozen=True)
+class MarketBenchmark:
+    """市場ベンチマーク"""
+    symbol: str  # "^GSPC", "^NDX"
+    performance_1y: float | None
+    performance_6m: float | None
+    performance_3m: float | None
+    performance_1m: float | None
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class Stock:
+    """
+    銘柄集約ルート
+
+    画面表示やAPI応答用に各エンティティを組み合わせる。
+    """
+    identity: StockIdentity
+    price: PriceSnapshot | None
+    metrics: StockMetrics | None
+
+    @property
+    def symbol(self) -> str:
+        return self.identity.symbol
+
+    @property
+    def volume_ratio(self) -> float:
+        """出来高倍率"""
+        if not self.price or not self.price.avg_volume_50d:
+            return 0.0
+        if self.price.avg_volume_50d == 0:
+            return 0.0
+        return (self.price.volume or 0) / self.price.avg_volume_50d
+
+    @property
+    def distance_from_52w_high(self) -> float:
+        """52週高値からの乖離率（%）"""
+        if not self.price or not self.price.week_52_high:
+            return 0.0
+        if self.price.week_52_high == 0:
+            return 0.0
+        price = self.price.price or 0
+        return ((self.price.week_52_high - price) / self.price.week_52_high) * 100
 ```
-
-### 変更後のカラム一覧
-
-| カラム | 型 | NULL | 説明 |
-|-------|-----|------|------|
-| relative_strength | DECIMAL(10,4) | YES | S&P500比の相対強度 |
-| rs_rating | INTEGER | YES | パーセンタイルランク (1-99) |
-| canslim_score | INTEGER | YES | CAN-SLIMスコア (0-100) |
 
 ---
 
 ## API設計
 
-### 1. データ収集開始
+### 1. ベンチマーク更新
+
+```http
+POST /api/admin/benchmarks/refresh
+```
+
+**レスポンス:**
+```json
+{
+  "success": true,
+  "data": {
+    "job_id": "benchmark_20240115_060000",
+    "indices_updated": 2,
+    "benchmarks": {
+      "^GSPC": 25.3,
+      "^NDX": 30.1
+    }
+  }
+}
+```
+
+### 2. データ収集開始
 
 ```http
 POST /api/admin/screener/refresh
@@ -246,13 +635,13 @@ Content-Type: application/json
   "data": {
     "job_id": "collect_20240115_103000",
     "job_type": "collect_data",
-    "status": "pending",
+    "status": "started",
     "total_symbols": 500
   }
 }
 ```
 
-### 2. RS Rating 再計算のみ
+### 3. 再計算のみ
 
 ```http
 POST /api/admin/screener/recalculate
@@ -263,77 +652,37 @@ Content-Type: application/json
 }
 ```
 
-**レスポンス:**
-```json
-{
-  "success": true,
-  "data": {
-    "job_id": "recalc_20240115_103000",
-    "job_type": "recalculate_rs_rating",
-    "status": "pending"
-  }
-}
-```
-
-### 3. ジョブステータス確認
-
-```http
-GET /api/admin/screener/jobs/{job_id}/status
-```
-
-**レスポンス:**
-```json
-{
-  "success": true,
-  "data": {
-    "job_id": "collect_20240115_103000",
-    "job_type": "collect_data",
-    "status": "running",
-    "progress": {
-      "total": 500,
-      "processed": 250,
-      "succeeded": 245,
-      "failed": 5,
-      "percentage": 50.0
-    },
-    "timing": {
-      "started_at": "2024-01-15T10:30:00Z",
-      "elapsed_seconds": 120,
-      "estimated_remaining_seconds": 120
-    },
-    "errors": [
-      {"symbol": "XYZ", "error": "Invalid symbol"}
-    ],
-    "next_job": "recalculate_rs_rating"  // 後続ジョブ
-  }
-}
-```
-
 ---
 
 ## 実行パターン
 
-### パターン A: フル更新（推奨）
+### パターン A: フル更新（日次推奨）
 
 ```
-管理者: POST /admin/screener/refresh { source: "sp500" }
+スケジューラー（または管理者）:
 
-実行順序:
-  1. Job 1: データ収集 (500銘柄) - 数十分
-  2. Job 2: RS Rating 再計算 - 数秒 (自動実行)
-  3. Job 3: CAN-SLIMスコア再計算 - 数秒 (自動実行)
+1. Job 0: ベンチマーク収集 - 数秒
+   POST /admin/benchmarks/refresh
+
+2. Job 1-3: データ収集フロー
+   POST /admin/screener/refresh { source: "sp500" }
+
+   実行順序:
+     Job 1: データ収集 (500銘柄) - 数十分
+     Job 2: RS Rating 再計算 - 数秒 (自動実行)
+     Job 3: CAN-SLIMスコア再計算 - 数秒 (自動実行)
 ```
 
-### パターン B: 1銘柄のみ更新
+### パターン B: 追加銘柄の更新
 
 ```
 管理者: POST /admin/screener/refresh { symbols: ["AAPL"] }
 
 実行順序:
-  1. Job 1: データ収集 (1銘柄) - 数秒
-  2. Job 2: RS Rating 再計算 (全500銘柄) - 数秒 (自動実行)
-     └─ AAPL の relative_strength が他499銘柄と比較される
-  3. Job 3: CAN-SLIMスコア再計算 (全500銘柄) - 数秒 (自動実行)
+  Job 1: データ収集 (1銘柄) - 数秒
+         └─ ベンチマークはDBから参照（API呼び出しなし）
+  Job 2: RS Rating 再計算 (全500銘柄) - 数秒 (自動実行)
+  Job 3: CAN-SLIMスコア再計算 (全500銘柄) - 数秒 (自動実行)
 ```
 
 ### パターン C: 再計算のみ
@@ -342,169 +691,11 @@ GET /api/admin/screener/jobs/{job_id}/status
 管理者: POST /admin/screener/recalculate { target: "all" }
 
 実行順序:
-  1. Job 2: RS Rating 再計算 - 数秒
-  2. Job 3: CAN-SLIMスコア再計算 - 数秒 (自動実行)
+  Job 2: RS Rating 再計算 - 数秒
+  Job 3: CAN-SLIMスコア再計算 - 数秒 (自動実行)
 
 ※ データ収集なし。DB内の既存データで再計算。
 ```
-
----
-
-## ジョブ状態遷移
-
-```
-                    ┌──────────┐
-                    │ pending  │
-                    └────┬─────┘
-                         │ start
-                         ▼
-                    ┌──────────┐
-         ┌──────────│ running  │──────────┐
-         │          └────┬─────┘          │
-         │ cancel        │ complete       │ error
-         ▼               ▼                ▼
-    ┌──────────┐   ┌──────────┐    ┌──────────┐
-    │cancelled │   │completed │    │  failed  │
-    └──────────┘   └────┬─────┘    └──────────┘
-                        │
-                        │ trigger next job
-                        ▼
-                   (次のジョブへ)
-```
-
----
-
-## ジョブチェーン
-
-```python
-class JobChain:
-    """ジョブの連鎖実行を管理"""
-
-    CHAINS = {
-        "collect_data": ["recalculate_rs_rating", "recalculate_canslim_score"],
-        "recalculate_rs_rating": ["recalculate_canslim_score"],
-        "recalculate_canslim_score": [],
-    }
-
-    @classmethod
-    def get_next_jobs(cls, job_type: str) -> list[str]:
-        return cls.CHAINS.get(job_type, [])
-```
-
----
-
-## 実装タスク
-
-### Phase 1: DBスキーマ変更
-
-- [ ] `stocks` テーブルに `relative_strength` カラム追加
-- [ ] `rs_rating`, `canslim_score` を NULL 許容に変更
-
-#### 現状と変更点
-
-| 項目 | 現状 (init.sql) | 変更後 |
-|-----|----------------|-------|
-| テーブル名 | `screener_results` | `stocks` |
-| rs_rating | `NOT NULL` | `NULL` 許容 |
-| canslim_total_score | `NOT NULL`, 名前が異なる | `canslim_score` に変更, `NULL` 許容 |
-| relative_strength | なし | `DECIMAL(10,4)` 追加 |
-| canslim_detail | `TEXT` | 削除（不要） |
-| pe_ratio | あり | 削除（不要） |
-| industry | なし | `VARCHAR(50)` 追加 |
-| avg_volume_50d | `avg_volume` として存在 | 名前変更 |
-
-#### init.sql 修正内容
-
-```sql
--- screener_results → stocks にテーブル名変更
--- カラム構成を設計書に合わせる
-
-CREATE TABLE stocks (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL UNIQUE,
-    name VARCHAR(100),
-    industry VARCHAR(50),
-
-    -- 株価情報
-    price DECIMAL(10,2),
-    change_percent DECIMAL(10,2),
-    volume BIGINT,
-    avg_volume_50d BIGINT,
-    market_cap BIGINT,
-    week_52_high DECIMAL(10,2),
-    week_52_low DECIMAL(10,2),
-
-    -- CAN-SLIM指標
-    eps_growth_quarterly DECIMAL(10,2),
-    eps_growth_annual DECIMAL(10,2),
-    institutional_ownership DECIMAL(10,2),
-
-    -- RS関連（Job 1, 2 で更新）
-    relative_strength DECIMAL(10,4),  -- Job 1: 生値を保存
-    rs_rating INTEGER,                 -- Job 2: パーセンタイル計算後に更新
-
-    -- CAN-SLIMスコア（Job 3 で更新）
-    canslim_score INTEGER,
-
-    -- メタデータ
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- インデックス
-CREATE INDEX idx_stocks_symbol ON stocks(symbol);
-CREATE INDEX idx_stocks_rs_rating ON stocks(rs_rating DESC);
-CREATE INDEX idx_stocks_canslim_score ON stocks(canslim_score DESC);
-```
-
-#### job_executions テーブル
-
-```sql
--- refresh_jobs → job_executions に変更
--- シンプルな構造に（進捗追跡なし、完了時に1回INSERT）
-
-CREATE TABLE job_executions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    job_type VARCHAR(50) NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    started_at TIMESTAMP NOT NULL,
-    completed_at TIMESTAMP NOT NULL,
-    duration_seconds INTEGER NOT NULL,
-    result JSONB,
-    error_message TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT valid_job_status CHECK (status IN ('completed', 'failed'))
-);
-
-CREATE INDEX idx_job_executions_type_created ON job_executions(job_type, created_at DESC);
-```
-
-#### 削除対象
-
-- `refresh_jobs` テーブル（`job_executions` に置き換え）
-
-### Phase 2: Job 1 (データ収集) リファクタリング
-
-- [ ] `CollectStockDataUseCase` 作成
-- [ ] `relative_strength` を計算して保存
-- [ ] `rs_rating`, `canslim_score` は NULL のまま
-
-### Phase 3: Job 2, 3 (再計算) 新規作成
-
-- [ ] `RecalculateRSRatingUseCase` 作成
-- [ ] `RecalculateCANSLIMScoreUseCase` 作成
-- [ ] ジョブチェーン実装
-
-### Phase 4: API更新
-
-- [ ] `/admin/screener/recalculate` エンドポイント追加
-- [ ] ジョブタイプに応じた処理分岐
-
-### Phase 5: フロントエンド更新
-
-- [ ] ジョブチェーンの進捗表示
-- [ ] 再計算ボタン追加
 
 ---
 
@@ -520,414 +711,51 @@ backend/src/jobs/
 │
 ├── executions/                       # 個別ジョブ実装（単一責務）
 │   ├── __init__.py
+│   ├── collect_benchmarks.py         # Job 0: ベンチマーク収集
 │   ├── collect_stock_data.py         # Job 1: データ収集
 │   ├── recalculate_rs_rating.py      # Job 2: RS Rating再計算
 │   └── recalculate_canslim.py        # Job 3: CAN-SLIMスコア再計算
 │
 └── flows/                            # 複数ジョブのオーケストレーション
     ├── __init__.py
+    ├── refresh_benchmarks.py         # ベンチマーク更新フロー
     └── refresh_screener.py           # 収集 → RS → CAN-SLIM フロー
 ```
 
-### 層の責務
-
-| 層 | 責務 | 依存関係 |
-|---|------|---------|
-| `lib/` | 共通基盤（基底クラス、エラー、コンテキスト） | なし |
-| `executions/` | 単一ジョブ実行（1ジョブ = 1ファイル） | `lib/` のみ |
-| `flows/` | ジョブの組み合わせ・順序制御 | `executions/` |
-
 ---
 
-## lib/ 設計
-
-### base.py - ジョブ基底クラス
-
-```python
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import TypeVar, Generic
-
-TInput = TypeVar("TInput")
-TOutput = TypeVar("TOutput")
-
-
-@dataclass
-class JobResult:
-    """ジョブ実行結果"""
-    success: bool
-    message: str
-    data: dict | None = None
-
-
-class Job(ABC, Generic[TInput, TOutput]):
-    """ジョブ基底クラス"""
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """ジョブ識別名"""
-        pass
-
-    @abstractmethod
-    async def execute(self, input: TInput) -> TOutput:
-        """ジョブ実行（サブクラスで実装）"""
-        pass
-```
-
-### context.py - 実行コンテキスト
-
-```python
-from dataclasses import dataclass, field
-from datetime import datetime
-
-
-@dataclass
-class JobContext:
-    """ジョブ実行コンテキスト"""
-    job_id: str
-    started_at: datetime = field(default_factory=datetime.utcnow)
-
-    # 進捗管理（オプション）
-    total: int = 0
-    processed: int = 0
-
-    def update_progress(self, processed: int) -> None:
-        self.processed = processed
-```
-
-### errors.py - ジョブ固有エラー
-
-```python
-class JobError(Exception):
-    """ジョブ実行エラー基底クラス"""
-    pass
-
-
-class JobExecutionError(JobError):
-    """ジョブ実行中のエラー"""
-    def __init__(self, job_name: str, message: str):
-        self.job_name = job_name
-        super().__init__(f"[{job_name}] {message}")
-
-
-class JobSkippedError(JobError):
-    """ジョブがスキップされた"""
-    pass
-```
-
----
-
-## executions/ 設計
-
-### collect_stock_data.py
-
-```python
-from dataclasses import dataclass
-from jobs.lib.base import Job
-
-
-@dataclass
-class CollectInput:
-    symbols: list[str]
-    source: str  # "sp500" | "nasdaq100"
-
-
-@dataclass
-class CollectOutput:
-    processed: int
-    succeeded: int
-    failed: int
-    errors: list[dict]
-
-
-class CollectStockDataJob(Job[CollectInput, CollectOutput]):
-    """データ収集ジョブ"""
-
-    name = "collect_stock_data"
-
-    def __init__(self, stock_repository, market_data_service):
-        self.stock_repository = stock_repository
-        self.market_data_service = market_data_service
-
-    async def execute(self, input: CollectInput) -> CollectOutput:
-        succeeded = 0
-        failed = 0
-        errors = []
-
-        # ベンチマーク取得
-        benchmark = await self.market_data_service.get_sp500_performance()
-
-        for symbol in input.symbols:
-            try:
-                # データ取得
-                quote = await self.market_data_service.get_quote(symbol)
-                financials = await self.market_data_service.get_financials(symbol)
-                history = await self.market_data_service.get_history(symbol)
-
-                # relative_strength 計算
-                stock_perf = self._calculate_performance(history)
-                relative_strength = stock_perf / benchmark * 100
-
-                # DB保存（rs_rating, canslim_score は NULL）
-                await self.stock_repository.upsert(
-                    symbol=symbol,
-                    quote=quote,
-                    financials=financials,
-                    relative_strength=relative_strength,
-                    rs_rating=None,
-                    canslim_score=None,
-                )
-                succeeded += 1
-
-            except Exception as e:
-                failed += 1
-                errors.append({"symbol": symbol, "error": str(e)})
-
-        return CollectOutput(
-            processed=len(input.symbols),
-            succeeded=succeeded,
-            failed=failed,
-            errors=errors,
-        )
-```
-
-### recalculate_rs_rating.py
-
-```python
-from dataclasses import dataclass
-from jobs.lib.base import Job
-
-
-@dataclass
-class RSRatingOutput:
-    updated_count: int
-
-
-class RecalculateRSRatingJob(Job[None, RSRatingOutput]):
-    """RS Rating再計算ジョブ"""
-
-    name = "recalculate_rs_rating"
-
-    def __init__(self, stock_repository):
-        self.stock_repository = stock_repository
-
-    async def execute(self, input: None = None) -> RSRatingOutput:
-        # 全銘柄の relative_strength を取得
-        stocks = await self.stock_repository.get_all_with_relative_strength()
-
-        # パーセンタイル計算
-        sorted_rs = sorted([s.relative_strength for s in stocks])
-        total = len(sorted_rs)
-
-        updates = []
-        for stock in stocks:
-            rank = sum(1 for rs in sorted_rs if rs <= stock.relative_strength)
-            percentile = (rank / total) * 100
-            rs_rating = max(1, min(99, int(percentile)))
-            updates.append((stock.symbol, rs_rating))
-
-        # 一括更新
-        await self.stock_repository.bulk_update_rs_rating(updates)
-
-        return RSRatingOutput(updated_count=len(updates))
-```
-
-### recalculate_canslim.py
-
-```python
-from dataclasses import dataclass
-from jobs.lib.base import Job
-
-
-@dataclass
-class CANSLIMOutput:
-    updated_count: int
-
-
-class RecalculateCANSLIMJob(Job[None, CANSLIMOutput]):
-    """CAN-SLIMスコア再計算ジョブ"""
-
-    name = "recalculate_canslim"
-
-    def __init__(self, stock_repository, canslim_calculator):
-        self.stock_repository = stock_repository
-        self.canslim_calculator = canslim_calculator
-
-    async def execute(self, input: None = None) -> CANSLIMOutput:
-        # 全銘柄のデータを取得
-        stocks = await self.stock_repository.get_all_for_canslim()
-
-        updates = []
-        for stock in stocks:
-            score = self.canslim_calculator.calculate(
-                eps_growth_quarterly=stock.eps_growth_quarterly,
-                eps_growth_annual=stock.eps_growth_annual,
-                distance_from_high=stock.distance_from_52w_high,
-                volume_ratio=stock.volume_ratio,
-                rs_rating=stock.rs_rating,
-                institutional_ownership=stock.institutional_ownership,
-            )
-            updates.append((stock.symbol, score))
-
-        # 一括更新
-        await self.stock_repository.bulk_update_canslim_score(updates)
-
-        return CANSLIMOutput(updated_count=len(updates))
-```
-
----
-
-## flows/ 設計
-
-### refresh_screener.py
-
-```python
-from dataclasses import dataclass
-from jobs.executions.collect_stock_data import CollectStockDataJob, CollectInput
-from jobs.executions.recalculate_rs_rating import RecalculateRSRatingJob
-from jobs.executions.recalculate_canslim import RecalculateCANSLIMJob
-
-
-@dataclass
-class RefreshScreenerInput:
-    source: str  # "sp500" | "nasdaq100"
-
-
-@dataclass
-class FlowStepResult:
-    job_name: str
-    success: bool
-    message: str
-    data: dict | None = None
-
-
-@dataclass
-class FlowResult:
-    success: bool
-    steps: list[FlowStepResult]
-
-
-class RefreshScreenerFlow:
-    """
-    スクリーナーデータ更新フロー
-
-    実行順序:
-      1. collect_stock_data   - 外部APIからデータ収集
-      2. recalculate_rs_rating - パーセンタイル計算
-      3. recalculate_canslim   - CAN-SLIMスコア計算
-    """
-
-    def __init__(
-        self,
-        collect_job: CollectStockDataJob,
-        rs_rating_job: RecalculateRSRatingJob,
-        canslim_job: RecalculateCANSLIMJob,
-        symbol_provider,  # S&P500/NASDAQ100のシンボル取得
-    ):
-        self.collect_job = collect_job
-        self.rs_rating_job = rs_rating_job
-        self.canslim_job = canslim_job
-        self.symbol_provider = symbol_provider
-
-    async def run(self, input: RefreshScreenerInput) -> FlowResult:
-        """フロー実行"""
-        steps = []
-
-        # Step 1: データ収集
-        symbols = await self.symbol_provider.get_symbols(input.source)
-        collect_result = await self.collect_job.execute(
-            CollectInput(symbols=symbols, source=input.source)
-        )
-        steps.append(FlowStepResult(
-            job_name=self.collect_job.name,
-            success=True,
-            message=f"Collected {collect_result.succeeded}/{collect_result.processed} symbols",
-            data={
-                "succeeded": collect_result.succeeded,
-                "failed": collect_result.failed,
-                "errors": collect_result.errors,
-            },
-        ))
-
-        # Step 2: RS Rating再計算
-        rs_result = await self.rs_rating_job.execute()
-        steps.append(FlowStepResult(
-            job_name=self.rs_rating_job.name,
-            success=True,
-            message=f"Updated RS Rating for {rs_result.updated_count} symbols",
-            data={"updated_count": rs_result.updated_count},
-        ))
-
-        # Step 3: CAN-SLIMスコア再計算
-        canslim_result = await self.canslim_job.execute()
-        steps.append(FlowStepResult(
-            job_name=self.canslim_job.name,
-            success=True,
-            message=f"Updated CAN-SLIM score for {canslim_result.updated_count} symbols",
-            data={"updated_count": canslim_result.updated_count},
-        ))
-
-        return FlowResult(success=True, steps=steps)
-```
-
----
-
-## Controller からの呼び出し
-
-```python
-# presentation/api/admin_controller.py
-
-from jobs.flows.refresh_screener import RefreshScreenerFlow, RefreshScreenerInput
-
-
-class AdminController:
-    def __init__(self, refresh_flow: RefreshScreenerFlow):
-        self.refresh_flow = refresh_flow
-
-    async def start_refresh(self, source: str) -> dict:
-        """スクリーナーデータ更新開始"""
-        # BackgroundTasksで実行
-        background_tasks.add_task(
-            self._run_refresh_flow,
-            RefreshScreenerInput(source=source)
-        )
-        return {"status": "started", "source": source}
-
-    async def _run_refresh_flow(self, input: RefreshScreenerInput):
-        result = await self.refresh_flow.run(input)
-        # ログ出力など
-        logger.info(f"Refresh flow completed: {result}")
-```
-
----
-
-## 成果物まとめ
-
-```
-backend/src/
-├── jobs/                             # ジョブ専用ディレクトリ
-│   ├── lib/
-│   │   ├── base.py                   # Job 基底クラス
-│   │   ├── context.py                # 実行コンテキスト
-│   │   └── errors.py                 # エラー定義
-│   ├── executions/
-│   │   ├── collect_stock_data.py     # Job 1
-│   │   ├── recalculate_rs_rating.py  # Job 2
-│   │   └── recalculate_canslim.py    # Job 3
-│   └── flows/
-│       └── refresh_screener.py       # フロー定義
-│
-└── presentation/
-    └── api/
-        └── admin_controller.py       # API エンドポイント
-```
+## 実装タスク
+
+### Phase 3: DB正規化 + Job 0 実装
+
+- [ ] `init.sql` を4テーブル構成に変更
+  - stocks（マスター）
+  - stock_prices（価格スナップショット）
+  - stock_metrics（計算指標）
+  - market_benchmarks（ベンチマーク）
+- [ ] Domain エンティティを正規化構造に更新
+- [ ] Repository インターフェース更新
+- [ ] SQLAlchemy モデル作成（4テーブル分）
+- [ ] Job 0: `CollectBenchmarksJob` 実装
+- [ ] Job 1: ベンチマークをDBから参照するよう修正
+
+### Phase 4: Job 2, 3 実装
+
+- [ ] Job 2: `RecalculateRSRatingJob` 実装
+- [ ] Job 3: `RecalculateCANSLIMJob` 実装
+- [ ] Flow を4ジョブ構成に更新
+
+### Phase 5: API・フロントエンド更新
+
+- [ ] `/admin/benchmarks/refresh` エンドポイント追加
+- [ ] `/admin/screener/recalculate` エンドポイント追加
+- [ ] フロントエンドの進捗表示更新
 
 ---
 
 ## 備考
 
-- Job 2, 3 は高速なため、フロントエンドでは「処理中」の表示のみで十分
-- 将来的にはJob 1を複数ワーカーで並列実行可能
-- Celery/ARQ導入時もジョブ単位で移行しやすい設計
-- `flows/` は将来的に他のフローも追加可能（例: `daily_market_update.py`）
+- Job 0 は1日1回で十分（市場指数は終値確定後に変わらない）
+- Job 1 は複数回実行可能（ベンチマークはDBキャッシュ）
+- 正規化によりデータ履歴の保持が容易に
+- 将来的に stock_prices, stock_metrics の履歴を活用可能
