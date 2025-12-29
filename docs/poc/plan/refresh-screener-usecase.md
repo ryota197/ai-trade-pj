@@ -956,12 +956,13 @@ backend/src/jobs/
 - 注: ドメインサービスは既存の `RSRatingCalculator`, `EPSGrowthCalculator` を Phase 4 で活用
 
 #### 3-3. Repository インターフェース（1テーブル = 1リポジトリ）
-- [ ] `stock_identity_repository.py` - stocks テーブル
-- [ ] `price_snapshot_repository.py` - stock_prices テーブル
-- [ ] `stock_metrics_repository.py` - stock_metrics テーブル
-- [ ] `benchmark_repository.py` - market_benchmarks テーブル
-- [ ] `stock_query_repository.py` - 読み取り専用（JOIN/集約）
-- [ ] `__init__.py` - エクスポート整理
+- [x] `stock_identity_repository.py` - stocks テーブル
+- [x] `price_snapshot_repository.py` - stock_prices テーブル
+- [x] `stock_metrics_repository.py` - stock_metrics テーブル
+- [x] `benchmark_repository.py` - market_benchmarks テーブル
+- [x] `stock_query_repository.py` - 読み取り専用（JOIN/集約）
+- [x] `__init__.py` - エクスポート整理
+- 注: 既存の `stock_repository.py` は 3-4 で移行後に削除
 
 #### 3-4. Infrastructure 実装
 - [ ] SQLAlchemy モデル作成（4テーブル分）

@@ -1,19 +1,25 @@
 """Domain Repositories"""
 
 from src.domain.repositories.benchmark_repository import BenchmarkRepository
-from src.domain.repositories.market_data_repository import MarketDataRepository
-from src.domain.repositories.market_snapshot_repository import MarketSnapshotRepository
-from src.domain.repositories.stock_repository import (
+from src.domain.repositories.price_snapshot_repository import PriceSnapshotRepository
+from src.domain.repositories.stock_identity_repository import StockIdentityRepository
+from src.domain.repositories.stock_metrics_repository import StockMetricsRepository
+from src.domain.repositories.stock_query_repository import (
     ScreenerFilter,
     ScreenerResult,
-    StockRepository,
+    StockData,
+    StockQueryRepository,
 )
 
 __all__ = [
+    # 単一テーブル リポジトリ
+    "StockIdentityRepository",
+    "PriceSnapshotRepository",
+    "StockMetricsRepository",
     "BenchmarkRepository",
-    "MarketDataRepository",
-    "MarketSnapshotRepository",
+    # クエリ リポジトリ（読み取り専用）
+    "StockQueryRepository",
+    "StockData",
     "ScreenerFilter",
     "ScreenerResult",
-    "StockRepository",
 ]

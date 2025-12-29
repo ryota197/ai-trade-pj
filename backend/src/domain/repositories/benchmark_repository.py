@@ -1,16 +1,15 @@
-"""Benchmark リポジトリ インターフェース"""
+"""市場ベンチマーク リポジトリ インターフェース"""
 
 from abc import ABC, abstractmethod
 
-from src.domain.entities.stock import MarketBenchmark
+from src.domain.entities import MarketBenchmark
 
 
 class BenchmarkRepository(ABC):
     """
-    Benchmark リポジトリの抽象インターフェース
+    市場ベンチマーク リポジトリ
 
-    市場ベンチマーク（S&P500, NASDAQ100）のパフォーマンスデータを扱う。
-    Job 0 で更新、Job 1 で参照する。
+    対応テーブル: market_benchmarks
     """
 
     @abstractmethod
