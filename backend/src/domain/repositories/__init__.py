@@ -1,5 +1,6 @@
 """Domain Repositories"""
 
+from src.domain.repositories.benchmark_repository import BenchmarkRepository
 from src.domain.repositories.market_data_repository import MarketDataRepository
 from src.domain.repositories.market_snapshot_repository import MarketSnapshotRepository
 from src.domain.repositories.stock_repository import (
@@ -9,6 +10,7 @@ from src.domain.repositories.stock_repository import (
 )
 
 __all__ = [
+    "BenchmarkRepository",
     "MarketDataRepository",
     "MarketSnapshotRepository",
     "ScreenerFilter",

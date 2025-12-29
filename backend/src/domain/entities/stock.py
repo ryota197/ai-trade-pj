@@ -1,21 +1,31 @@
-"""Stock エンティティ"""
+"""Stock エンティティ（正規化構造）"""
 
 from dataclasses import dataclass
 from datetime import datetime
 
 
 @dataclass(frozen=True)
-class Stock:
+class StockIdentity:
     """
-    Stock エンティティ
+    銘柄マスター
 
-    CAN-SLIMスクリーニング対象の銘柄を表すドメインエンティティ。
-    frozen=True で不変オブジェクトとして扱う。
+    銘柄の基本情報を表す。更新頻度は稀。
     """
 
     symbol: str
-    name: str | None
-    industry: str | None
+    name: str | None = None
+    industry: str | None = None
+
+
+@dataclass(frozen=True)
+class PriceSnapshot:
+    """
+    価格スナップショット
+
+    日次の株価・出来高データ。履歴として蓄積可能。
+    """
+
+    symbol: str
     price: float | None
     change_percent: float | None
     volume: int | None
@@ -23,39 +33,115 @@ class Stock:
     market_cap: int | None
     week_52_high: float | None
     week_52_low: float | None
+    recorded_at: datetime
 
-    # CAN-SLIM指標
+
+@dataclass(frozen=True)
+class StockMetrics:
+    """
+    計算指標
+
+    CAN-SLIM関連の指標。Job 1, 2, 3 で段階的に更新。
+    """
+
+    symbol: str
+
+    # ファンダメンタル（Job 1 で取得）
     eps_growth_quarterly: float | None  # C - Current Quarterly Earnings
     eps_growth_annual: float | None  # A - Annual Earnings
     institutional_ownership: float | None  # I - Institutional Sponsorship
 
     # RS関連（Job 1, 2 で段階的に設定）
-    relative_strength: float | None  # S&P500比の相対強度（生値）- Job 1で保存
-    rs_rating: int | None  # L - Leader (RS Rating: 1-99) - Job 2で更新
+    relative_strength: float | None  # S&P500比の相対強度（生値）- Job 1
+    rs_rating: int | None  # L - Leader (RS Rating: 1-99) - Job 2
 
     # CAN-SLIMスコア（Job 3 で設定）
     canslim_score: int | None  # 0-100
 
-    # メタデータ
-    updated_at: datetime
+    calculated_at: datetime
+
+
+@dataclass(frozen=True)
+class MarketBenchmark:
+    """
+    市場ベンチマーク
+
+    S&P500やNASDAQ100のパフォーマンス。Job 0 で1日1回更新。
+    """
+
+    symbol: str  # "^GSPC" (S&P500), "^NDX" (NASDAQ100)
+    performance_1y: float | None
+    performance_6m: float | None
+    performance_3m: float | None
+    performance_1m: float | None
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class Stock:
+    """
+    銘柄集約ルート
+
+    画面表示やAPI応答用に各エンティティを組み合わせる。
+    frozen=True で不変オブジェクトとして扱う。
+    """
+
+    identity: StockIdentity
+    price: PriceSnapshot | None = None
+    metrics: StockMetrics | None = None
+
+    @property
+    def symbol(self) -> str:
+        """ティッカーシンボル"""
+        return self.identity.symbol
+
+    @property
+    def name(self) -> str | None:
+        """企業名"""
+        return self.identity.name
+
+    @property
+    def industry(self) -> str | None:
+        """業種"""
+        return self.identity.industry
 
     @property
     def volume_ratio(self) -> float:
         """S - Supply and Demand: 出来高倍率を計算"""
-        if self.avg_volume_50d is None or self.avg_volume_50d == 0:
+        if not self.price:
             return 0.0
-        if self.volume is None:
+        if self.price.avg_volume_50d is None or self.price.avg_volume_50d == 0:
             return 0.0
-        return self.volume / self.avg_volume_50d
+        if self.price.volume is None:
+            return 0.0
+        return self.price.volume / self.price.avg_volume_50d
 
     @property
     def distance_from_52w_high(self) -> float:
         """N - New High: 52週高値からの乖離率（%）"""
-        if self.week_52_high is None or self.week_52_high == 0:
+        if not self.price:
             return 0.0
-        if self.price is None:
+        if self.price.week_52_high is None or self.price.week_52_high == 0:
             return 0.0
-        return ((self.week_52_high - self.price) / self.week_52_high) * 100
+        if self.price.price is None:
+            return 0.0
+        return (
+            (self.price.week_52_high - self.price.price) / self.price.week_52_high
+        ) * 100
+
+    @property
+    def rs_rating(self) -> int | None:
+        """RS Rating (1-99)"""
+        if not self.metrics:
+            return None
+        return self.metrics.rs_rating
+
+    @property
+    def canslim_score(self) -> int | None:
+        """CAN-SLIMスコア (0-100)"""
+        if not self.metrics:
+            return None
+        return self.metrics.canslim_score
 
     def is_near_52w_high(self, threshold: float = 15.0) -> bool:
         """52週高値付近にいるか（デフォルト15%以内）"""
@@ -65,13 +151,15 @@ class Stock:
         self, quarterly_threshold: float = 25.0, annual_threshold: float = 25.0
     ) -> bool:
         """EPS成長率が基準を満たすか"""
+        if not self.metrics:
+            return False
         quarterly_ok = (
-            self.eps_growth_quarterly is not None
-            and self.eps_growth_quarterly >= quarterly_threshold
+            self.metrics.eps_growth_quarterly is not None
+            and self.metrics.eps_growth_quarterly >= quarterly_threshold
         )
         annual_ok = (
-            self.eps_growth_annual is not None
-            and self.eps_growth_annual >= annual_threshold
+            self.metrics.eps_growth_annual is not None
+            and self.metrics.eps_growth_annual >= annual_threshold
         )
         return quarterly_ok and annual_ok
 

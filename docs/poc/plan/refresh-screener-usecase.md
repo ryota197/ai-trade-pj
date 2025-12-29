@@ -507,17 +507,50 @@ class CollectStockDataInput:
 
 ## Domain エンティティ設計
 
-### 正規化後のエンティティ
+### 設計方針
+
+**1エンティティ = 1ファイル** の原則に従い、責務を明確に分離する。
+
+### ディレクトリ構造
+
+```
+backend/src/domain/entities/
+├── __init__.py
+├── stock_identity.py      # 銘柄マスター
+├── price_snapshot.py      # 価格スナップショット
+├── stock_metrics.py       # 計算指標
+├── market_benchmark.py    # 市場ベンチマーク
+├── stock.py               # 銘柄集約ルート
+└── stock_summary.py       # 表示用DTO
+```
+
+### 各エンティティの責務
+
+| ファイル | クラス | 対応テーブル | 責務 |
+|----------|--------|-------------|------|
+| stock_identity.py | StockIdentity | stocks | 銘柄の基本情報（symbol, name, industry） |
+| price_snapshot.py | PriceSnapshot | stock_prices | 日次の株価・出来高データ |
+| stock_metrics.py | StockMetrics | stock_metrics | CAN-SLIM関連の計算指標 |
+| market_benchmark.py | MarketBenchmark | market_benchmarks | S&P500/NASDAQ100のパフォーマンス |
+| stock.py | Stock | - | 集約ルート（identity + price + metrics） |
+| stock_summary.py | StockSummary | - | 一覧表示用の簡易情報 |
+
+### エンティティ定義
+
+#### stock_identity.py
 
 ```python
 @dataclass(frozen=True)
 class StockIdentity:
     """銘柄マスター"""
     symbol: str
-    name: str | None
-    industry: str | None
+    name: str | None = None
+    industry: str | None = None
+```
 
+#### price_snapshot.py
 
+```python
 @dataclass(frozen=True)
 class PriceSnapshot:
     """価格スナップショット"""
@@ -530,21 +563,27 @@ class PriceSnapshot:
     week_52_high: float | None
     week_52_low: float | None
     recorded_at: datetime
+```
 
+#### stock_metrics.py
 
+```python
 @dataclass(frozen=True)
 class StockMetrics:
     """計算指標"""
     symbol: str
-    eps_growth_quarterly: float | None
-    eps_growth_annual: float | None
-    institutional_ownership: float | None
-    relative_strength: float | None
-    rs_rating: int | None
-    canslim_score: int | None
+    eps_growth_quarterly: float | None   # C - Current Quarterly Earnings
+    eps_growth_annual: float | None      # A - Annual Earnings
+    institutional_ownership: float | None # I - Institutional Sponsorship
+    relative_strength: float | None      # Job 1: S&P500比の生値
+    rs_rating: int | None                # Job 2: パーセンタイル (1-99)
+    canslim_score: int | None            # Job 3: 0-100
     calculated_at: datetime
+```
 
+#### market_benchmark.py
 
+```python
 @dataclass(frozen=True)
 class MarketBenchmark:
     """市場ベンチマーク"""
@@ -554,8 +593,11 @@ class MarketBenchmark:
     performance_3m: float | None
     performance_1m: float | None
     recorded_at: datetime
+```
 
+#### stock.py
 
+```python
 @dataclass(frozen=True)
 class Stock:
     """
@@ -564,8 +606,8 @@ class Stock:
     画面表示やAPI応答用に各エンティティを組み合わせる。
     """
     identity: StockIdentity
-    price: PriceSnapshot | None
-    metrics: StockMetrics | None
+    price: PriceSnapshot | None = None
+    metrics: StockMetrics | None = None
 
     @property
     def symbol(self) -> str:
@@ -574,21 +616,182 @@ class Stock:
     @property
     def volume_ratio(self) -> float:
         """出来高倍率"""
-        if not self.price or not self.price.avg_volume_50d:
-            return 0.0
-        if self.price.avg_volume_50d == 0:
-            return 0.0
-        return (self.price.volume or 0) / self.price.avg_volume_50d
+        ...
 
     @property
     def distance_from_52w_high(self) -> float:
         """52週高値からの乖離率（%）"""
-        if not self.price or not self.price.week_52_high:
-            return 0.0
-        if self.price.week_52_high == 0:
-            return 0.0
-        price = self.price.price or 0
-        return ((self.price.week_52_high - price) / self.price.week_52_high) * 100
+        ...
+```
+
+---
+
+## Repository 設計
+
+### 設計方針
+
+**1テーブル = 1リポジトリ** の原則に従い、責務を明確に分離する。
+読み取り専用の集約操作は別途 QueryRepository として切り出す。
+
+### ディレクトリ構造
+
+```
+backend/src/domain/repositories/
+├── __init__.py
+├── stock_identity_repository.py   # stocks テーブル
+├── price_snapshot_repository.py   # stock_prices テーブル
+├── stock_metrics_repository.py    # stock_metrics テーブル
+├── benchmark_repository.py        # market_benchmarks テーブル
+└── stock_query_repository.py      # 読み取り専用（JOIN/集約操作）
+```
+
+### 各リポジトリの責務
+
+| リポジトリ | テーブル | 責務 |
+|-----------|---------|------|
+| StockIdentityRepository | stocks | マスターCRUD |
+| PriceSnapshotRepository | stock_prices | 価格スナップショット保存・取得 |
+| StockMetricsRepository | stock_metrics | 指標保存・Job 2, 3用更新 |
+| BenchmarkRepository | market_benchmarks | ベンチマーク保存・取得 |
+| StockQueryRepository | JOIN | スクリーニング・集約取得（読み取り専用） |
+
+### インターフェース定義
+
+#### stock_identity_repository.py
+
+```python
+class StockIdentityRepository(ABC):
+    """銘柄マスターリポジトリ"""
+
+    @abstractmethod
+    async def save(self, identity: StockIdentity) -> None:
+        """保存（UPSERT）"""
+        pass
+
+    @abstractmethod
+    async def get(self, symbol: str) -> StockIdentity | None:
+        """取得"""
+        pass
+
+    @abstractmethod
+    async def get_all_symbols(self) -> list[str]:
+        """全シンボル取得"""
+        pass
+
+    @abstractmethod
+    async def delete(self, symbol: str) -> bool:
+        """削除"""
+        pass
+```
+
+#### price_snapshot_repository.py
+
+```python
+class PriceSnapshotRepository(ABC):
+    """価格スナップショットリポジトリ"""
+
+    @abstractmethod
+    async def save(self, snapshot: PriceSnapshot) -> None:
+        """保存"""
+        pass
+
+    @abstractmethod
+    async def get_latest(self, symbol: str) -> PriceSnapshot | None:
+        """最新取得"""
+        pass
+
+    @abstractmethod
+    async def get_by_date(self, symbol: str, date: date) -> PriceSnapshot | None:
+        """日付指定取得"""
+        pass
+```
+
+#### stock_metrics_repository.py
+
+```python
+class StockMetricsRepository(ABC):
+    """計算指標リポジトリ"""
+
+    @abstractmethod
+    async def save(self, metrics: StockMetrics) -> None:
+        """保存"""
+        pass
+
+    @abstractmethod
+    async def get_latest(self, symbol: str) -> StockMetrics | None:
+        """最新取得"""
+        pass
+
+    # ----- Job 2用 -----
+    @abstractmethod
+    async def get_all_with_relative_strength(self) -> list[tuple[str, float]]:
+        """relative_strengthを持つ全銘柄を取得"""
+        pass
+
+    @abstractmethod
+    async def bulk_update_rs_rating(self, updates: list[tuple[str, int]]) -> int:
+        """rs_ratingを一括更新"""
+        pass
+
+    # ----- Job 3用 -----
+    @abstractmethod
+    async def bulk_update_canslim_score(self, updates: list[tuple[str, int]]) -> int:
+        """canslim_scoreを一括更新"""
+        pass
+```
+
+#### benchmark_repository.py
+
+```python
+class BenchmarkRepository(ABC):
+    """市場ベンチマークリポジトリ"""
+
+    @abstractmethod
+    async def save(self, benchmark: MarketBenchmark) -> None:
+        """保存（UPSERT）"""
+        pass
+
+    @abstractmethod
+    async def get_latest(self, symbol: str) -> MarketBenchmark | None:
+        """最新取得"""
+        pass
+
+    @abstractmethod
+    async def get_latest_performance_1y(self, symbol: str) -> float | None:
+        """1年パフォーマンス取得（Job 1用）"""
+        pass
+```
+
+#### stock_query_repository.py
+
+```python
+class StockQueryRepository(ABC):
+    """読み取り専用クエリリポジトリ"""
+
+    @abstractmethod
+    async def get_stock(self, symbol: str) -> Stock | None:
+        """銘柄を集約して取得（identity + price + metrics）"""
+        pass
+
+    @abstractmethod
+    async def get_stocks(self, symbols: list[str]) -> list[Stock]:
+        """複数銘柄を集約して取得"""
+        pass
+
+    @abstractmethod
+    async def screen(
+        self,
+        filter_: ScreenerFilter,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> ScreenerResult:
+        """CAN-SLIM条件でスクリーニング"""
+        pass
+
+    @abstractmethod
+    async def get_all_for_canslim(self) -> list[Stock]:
+        """CAN-SLIMスコア計算に必要な全銘柄を取得（Job 3用）"""
+        pass
 ```
 
 ---
@@ -726,16 +929,38 @@ backend/src/jobs/
 
 ## 実装タスク
 
-### Phase 3: DB正規化 + Job 0 実装
+### Phase 3: DB正規化 + エンティティ/リポジトリ分離
 
-- [ ] `init.sql` を4テーブル構成に変更
+#### 3-1. DBスキーマ
+- [x] `init.sql` を4テーブル構成に変更
   - stocks（マスター）
   - stock_prices（価格スナップショット）
   - stock_metrics（計算指標）
   - market_benchmarks（ベンチマーク）
-- [ ] Domain エンティティを正規化構造に更新
-- [ ] Repository インターフェース更新
+
+#### 3-2. Domain エンティティ（1エンティティ = 1ファイル）
+- [ ] `stock_identity.py` - StockIdentity
+- [ ] `price_snapshot.py` - PriceSnapshot
+- [ ] `stock_metrics.py` - StockMetrics
+- [ ] `market_benchmark.py` - MarketBenchmark
+- [ ] `stock.py` - Stock（集約ルート）
+- [ ] `stock_summary.py` - StockSummary
+- [ ] `__init__.py` - エクスポート整理
+
+#### 3-3. Repository インターフェース（1テーブル = 1リポジトリ）
+- [ ] `stock_identity_repository.py` - stocks テーブル
+- [ ] `price_snapshot_repository.py` - stock_prices テーブル
+- [ ] `stock_metrics_repository.py` - stock_metrics テーブル
+- [ ] `benchmark_repository.py` - market_benchmarks テーブル
+- [ ] `stock_query_repository.py` - 読み取り専用（JOIN/集約）
+- [ ] `__init__.py` - エクスポート整理
+
+#### 3-4. Infrastructure 実装
 - [ ] SQLAlchemy モデル作成（4テーブル分）
+- [ ] Mapper 作成
+- [ ] Repository 実装（5リポジトリ）
+
+#### 3-5. Job 0, 1 実装
 - [ ] Job 0: `CollectBenchmarksJob` 実装
 - [ ] Job 1: ベンチマークをDBから参照するよう修正
 

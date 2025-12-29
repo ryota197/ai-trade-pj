@@ -5,15 +5,29 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =====================================================
--- stocks: 銘柄データ（CAN-SLIMスクリーニング結果）
+-- stocks: 銘柄マスター
 -- =====================================================
 CREATE TABLE stocks (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL UNIQUE,
+    symbol VARCHAR(10) PRIMARY KEY,
     name VARCHAR(100),
     industry VARCHAR(50),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-    -- 株価情報
+COMMENT ON TABLE stocks IS '銘柄マスター（基本情報のみ）';
+COMMENT ON COLUMN stocks.symbol IS 'ティッカーシンボル（例: AAPL）';
+COMMENT ON COLUMN stocks.name IS '企業名';
+COMMENT ON COLUMN stocks.industry IS '業種';
+COMMENT ON COLUMN stocks.created_at IS '作成日時';
+COMMENT ON COLUMN stocks.updated_at IS '更新日時';
+
+-- =====================================================
+-- stock_prices: 価格スナップショット（日次）
+-- =====================================================
+CREATE TABLE stock_prices (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL REFERENCES stocks(symbol) ON DELETE CASCADE,
     price DECIMAL(10,2),
     change_percent DECIMAL(10,2),
     volume BIGINT,
@@ -21,51 +35,98 @@ CREATE TABLE stocks (
     market_cap BIGINT,
     week_52_high DECIMAL(10,2),
     week_52_low DECIMAL(10,2),
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    -- CAN-SLIM指標
+    CONSTRAINT unique_stock_price_per_day
+        UNIQUE (symbol, (recorded_at::date))
+);
+
+COMMENT ON TABLE stock_prices IS '価格スナップショット（日次蓄積）';
+COMMENT ON COLUMN stock_prices.symbol IS 'ティッカーシンボル';
+COMMENT ON COLUMN stock_prices.price IS '現在株価';
+COMMENT ON COLUMN stock_prices.change_percent IS '前日比変動率（%）';
+COMMENT ON COLUMN stock_prices.volume IS '出来高';
+COMMENT ON COLUMN stock_prices.avg_volume_50d IS '50日平均出来高';
+COMMENT ON COLUMN stock_prices.market_cap IS '時価総額（USD）';
+COMMENT ON COLUMN stock_prices.week_52_high IS '52週高値';
+COMMENT ON COLUMN stock_prices.week_52_low IS '52週安値';
+COMMENT ON COLUMN stock_prices.recorded_at IS '記録日時';
+
+CREATE INDEX idx_stock_prices_symbol_date
+    ON stock_prices(symbol, recorded_at DESC);
+
+-- =====================================================
+-- stock_metrics: 計算指標（CAN-SLIM関連）
+-- =====================================================
+CREATE TABLE stock_metrics (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL REFERENCES stocks(symbol) ON DELETE CASCADE,
+
+    -- ファンダメンタル（Job 1 で取得）
     eps_growth_quarterly DECIMAL(10,2),
     eps_growth_annual DECIMAL(10,2),
     institutional_ownership DECIMAL(10,2),
 
-    -- RS関連（Job 1, 2 で更新）
-    relative_strength DECIMAL(10,4),  -- Job 1: 生値を保存
-    rs_rating INTEGER,                 -- Job 2: パーセンタイル計算後に更新
+    -- RS関連（Job 0, 1, 2 で段階的に設定）
+    relative_strength DECIMAL(10,4),  -- Job 1: S&P500比の生値
+    rs_rating INTEGER,                 -- Job 2: パーセンタイル (1-99)
 
-    -- CAN-SLIMスコア（Job 3 で更新）
-    canslim_score INTEGER,
+    -- CAN-SLIMスコア（Job 3 で設定）
+    canslim_score INTEGER,             -- 0-100
 
-    -- メタデータ
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    -- 制約
-    CONSTRAINT valid_rs_rating CHECK (rs_rating IS NULL OR (rs_rating >= 1 AND rs_rating <= 99)),
-    CONSTRAINT valid_canslim_score CHECK (canslim_score IS NULL OR (canslim_score >= 0 AND canslim_score <= 100))
+    CONSTRAINT valid_rs_rating
+        CHECK (rs_rating IS NULL OR (rs_rating >= 1 AND rs_rating <= 99)),
+    CONSTRAINT valid_canslim_score
+        CHECK (canslim_score IS NULL OR (canslim_score >= 0 AND canslim_score <= 100)),
+    CONSTRAINT unique_stock_metrics_per_day
+        UNIQUE (symbol, (calculated_at::date))
 );
 
-COMMENT ON TABLE stocks IS '銘柄データ（CAN-SLIMスクリーニング結果）';
-COMMENT ON COLUMN stocks.symbol IS 'ティッカーシンボル（例: AAPL）';
-COMMENT ON COLUMN stocks.name IS '企業名';
-COMMENT ON COLUMN stocks.industry IS '業種';
-COMMENT ON COLUMN stocks.price IS '現在株価';
-COMMENT ON COLUMN stocks.change_percent IS '前日比変動率（%）';
-COMMENT ON COLUMN stocks.volume IS '出来高';
-COMMENT ON COLUMN stocks.avg_volume_50d IS '50日平均出来高';
-COMMENT ON COLUMN stocks.market_cap IS '時価総額（USD）';
-COMMENT ON COLUMN stocks.week_52_high IS '52週高値';
-COMMENT ON COLUMN stocks.week_52_low IS '52週安値';
-COMMENT ON COLUMN stocks.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
-COMMENT ON COLUMN stocks.eps_growth_annual IS 'A: 年間EPS成長率（%）';
-COMMENT ON COLUMN stocks.institutional_ownership IS 'I: 機関投資家保有率（%）';
-COMMENT ON COLUMN stocks.relative_strength IS 'S&P500比の相対強度（生値）- Job 1で保存';
-COMMENT ON COLUMN stocks.rs_rating IS 'L: RS Rating（1-99パーセンタイル）- Job 2で更新';
-COMMENT ON COLUMN stocks.canslim_score IS 'CAN-SLIMスコア（0-100）- Job 3で更新';
-COMMENT ON COLUMN stocks.updated_at IS '最終更新日時';
-COMMENT ON COLUMN stocks.created_at IS '作成日時';
+COMMENT ON TABLE stock_metrics IS '計算指標（CAN-SLIM関連）';
+COMMENT ON COLUMN stock_metrics.symbol IS 'ティッカーシンボル';
+COMMENT ON COLUMN stock_metrics.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
+COMMENT ON COLUMN stock_metrics.eps_growth_annual IS 'A: 年間EPS成長率（%）';
+COMMENT ON COLUMN stock_metrics.institutional_ownership IS 'I: 機関投資家保有率（%）';
+COMMENT ON COLUMN stock_metrics.relative_strength IS 'S&P500比の相対強度（生値）- Job 1で保存';
+COMMENT ON COLUMN stock_metrics.rs_rating IS 'L: RS Rating（1-99パーセンタイル）- Job 2で更新';
+COMMENT ON COLUMN stock_metrics.canslim_score IS 'CAN-SLIMスコア（0-100）- Job 3で更新';
+COMMENT ON COLUMN stock_metrics.calculated_at IS '計算日時';
 
--- idx_stocks_symbol は不要（UNIQUE制約で自動作成される）
-CREATE INDEX idx_stocks_rs_rating ON stocks(rs_rating DESC);
-CREATE INDEX idx_stocks_canslim_score ON stocks(canslim_score DESC);
+CREATE INDEX idx_stock_metrics_symbol_date
+    ON stock_metrics(symbol, calculated_at DESC);
+CREATE INDEX idx_stock_metrics_rs_rating
+    ON stock_metrics(rs_rating DESC) WHERE rs_rating IS NOT NULL;
+CREATE INDEX idx_stock_metrics_canslim
+    ON stock_metrics(canslim_score DESC) WHERE canslim_score IS NOT NULL;
+
+-- =====================================================
+-- market_benchmarks: 市場ベンチマーク（Job 0 で更新）
+-- =====================================================
+CREATE TABLE market_benchmarks (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,  -- "^GSPC" (S&P500), "^NDX" (NASDAQ100)
+    performance_1y DECIMAL(10,4),
+    performance_6m DECIMAL(10,4),
+    performance_3m DECIMAL(10,4),
+    performance_1m DECIMAL(10,4),
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT unique_benchmark_per_day
+        UNIQUE (symbol, (recorded_at::date))
+);
+
+COMMENT ON TABLE market_benchmarks IS '市場ベンチマーク（Job 0 で1日1回更新）';
+COMMENT ON COLUMN market_benchmarks.symbol IS '指数シンボル（^GSPC: S&P500, ^NDX: NASDAQ100）';
+COMMENT ON COLUMN market_benchmarks.performance_1y IS '1年パフォーマンス（%）';
+COMMENT ON COLUMN market_benchmarks.performance_6m IS '6ヶ月パフォーマンス（%）';
+COMMENT ON COLUMN market_benchmarks.performance_3m IS '3ヶ月パフォーマンス（%）';
+COMMENT ON COLUMN market_benchmarks.performance_1m IS '1ヶ月パフォーマンス（%）';
+COMMENT ON COLUMN market_benchmarks.recorded_at IS '記録日時';
+
+CREATE INDEX idx_market_benchmarks_symbol_date
+    ON market_benchmarks(symbol, recorded_at DESC);
 
 -- =====================================================
 -- market_snapshots: マーケット状態の履歴
@@ -264,7 +325,7 @@ CREATE TABLE job_executions (
 
 COMMENT ON TABLE job_executions IS 'ジョブ実行履歴（完了時に1回INSERT）';
 COMMENT ON COLUMN job_executions.id IS 'ジョブID（UUID）';
-COMMENT ON COLUMN job_executions.job_type IS 'ジョブ種別（refresh_screener等）';
+COMMENT ON COLUMN job_executions.job_type IS 'ジョブ種別（collect_benchmarks, collect_stock_data等）';
 COMMENT ON COLUMN job_executions.status IS '結果: completed/failed';
 COMMENT ON COLUMN job_executions.started_at IS '開始日時';
 COMMENT ON COLUMN job_executions.completed_at IS '完了日時';
