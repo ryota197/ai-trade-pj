@@ -965,9 +965,16 @@ backend/src/jobs/
 - 注: 既存の `stock_repository.py` は 3-4 で移行後に削除
 
 #### 3-4. Infrastructure 実装
-- [ ] SQLAlchemy モデル作成（4テーブル分）
-- [ ] Mapper 作成
-- [ ] Repository 実装（5リポジトリ）
+- [x] SQLAlchemy モデル作成（4テーブル分）
+  - StockModel, StockPriceModel, StockMetricsModel, MarketBenchmarkModel
+- [x] Repository 実装（5リポジトリ）
+  - PostgresStockIdentityRepository
+  - PostgresPriceSnapshotRepository
+  - PostgresStockMetricsRepository
+  - PostgresBenchmarkRepository
+  - PostgresStockQueryRepository
+- 注: Mapperはリポジトリ内で変換（シンプルなため別クラス不要）
+- 注: 旧リポジトリ（PostgresStockRepository）は互換性のため残存
 
 #### 3-5. Job 0, 1 実装
 - [ ] Job 0: `CollectBenchmarksJob` 実装
