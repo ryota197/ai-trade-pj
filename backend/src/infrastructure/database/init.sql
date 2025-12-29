@@ -5,6 +5,69 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =====================================================
+-- stocks: 銘柄データ（CAN-SLIMスクリーニング結果）
+-- =====================================================
+CREATE TABLE stocks (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL UNIQUE,
+    name VARCHAR(100),
+    industry VARCHAR(50),
+
+    -- 株価情報
+    price DECIMAL(10,2),
+    change_percent DECIMAL(10,2),
+    volume BIGINT,
+    avg_volume_50d BIGINT,
+    market_cap BIGINT,
+    week_52_high DECIMAL(10,2),
+    week_52_low DECIMAL(10,2),
+
+    -- CAN-SLIM指標
+    eps_growth_quarterly DECIMAL(10,2),
+    eps_growth_annual DECIMAL(10,2),
+    institutional_ownership DECIMAL(10,2),
+
+    -- RS関連（Job 1, 2 で更新）
+    relative_strength DECIMAL(10,4),  -- Job 1: 生値を保存
+    rs_rating INTEGER,                 -- Job 2: パーセンタイル計算後に更新
+
+    -- CAN-SLIMスコア（Job 3 で更新）
+    canslim_score INTEGER,
+
+    -- メタデータ
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    -- 制約
+    CONSTRAINT valid_rs_rating CHECK (rs_rating IS NULL OR (rs_rating >= 1 AND rs_rating <= 99)),
+    CONSTRAINT valid_canslim_score CHECK (canslim_score IS NULL OR (canslim_score >= 0 AND canslim_score <= 100))
+);
+
+COMMENT ON TABLE stocks IS '銘柄データ（CAN-SLIMスクリーニング結果）';
+COMMENT ON COLUMN stocks.symbol IS 'ティッカーシンボル（例: AAPL）';
+COMMENT ON COLUMN stocks.name IS '企業名';
+COMMENT ON COLUMN stocks.industry IS '業種';
+COMMENT ON COLUMN stocks.price IS '現在株価';
+COMMENT ON COLUMN stocks.change_percent IS '前日比変動率（%）';
+COMMENT ON COLUMN stocks.volume IS '出来高';
+COMMENT ON COLUMN stocks.avg_volume_50d IS '50日平均出来高';
+COMMENT ON COLUMN stocks.market_cap IS '時価総額（USD）';
+COMMENT ON COLUMN stocks.week_52_high IS '52週高値';
+COMMENT ON COLUMN stocks.week_52_low IS '52週安値';
+COMMENT ON COLUMN stocks.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
+COMMENT ON COLUMN stocks.eps_growth_annual IS 'A: 年間EPS成長率（%）';
+COMMENT ON COLUMN stocks.institutional_ownership IS 'I: 機関投資家保有率（%）';
+COMMENT ON COLUMN stocks.relative_strength IS 'S&P500比の相対強度（生値）- Job 1で保存';
+COMMENT ON COLUMN stocks.rs_rating IS 'L: RS Rating（1-99パーセンタイル）- Job 2で更新';
+COMMENT ON COLUMN stocks.canslim_score IS 'CAN-SLIMスコア（0-100）- Job 3で更新';
+COMMENT ON COLUMN stocks.updated_at IS '最終更新日時';
+COMMENT ON COLUMN stocks.created_at IS '作成日時';
+
+-- idx_stocks_symbol は不要（UNIQUE制約で自動作成される）
+CREATE INDEX idx_stocks_rs_rating ON stocks(rs_rating DESC);
+CREATE INDEX idx_stocks_canslim_score ON stocks(canslim_score DESC);
+
+-- =====================================================
 -- market_snapshots: マーケット状態の履歴
 -- =====================================================
 CREATE TABLE market_snapshots (
@@ -40,7 +103,7 @@ CREATE TABLE market_snapshots (
     CONSTRAINT valid_pc_signal CHECK (put_call_signal IN ('bullish', 'neutral', 'bearish'))
 );
 
-COMMENT ON TABLE market_snapshots IS 'マーケット状態の履歴スナップショット（1時間ごと）';
+COMMENT ON TABLE market_snapshots IS 'マーケット状態の履歴スナップショット';
 COMMENT ON COLUMN market_snapshots.recorded_at IS 'スナップショット取得日時';
 COMMENT ON COLUMN market_snapshots.vix IS 'VIX指数（恐怖指数）';
 COMMENT ON COLUMN market_snapshots.vix_signal IS 'VIXシグナル: bullish/neutral/bearish';
@@ -59,68 +122,6 @@ COMMENT ON COLUMN market_snapshots.recommendation IS '推奨アクション';
 CREATE INDEX idx_market_snapshots_recorded_at ON market_snapshots(recorded_at DESC);
 
 -- =====================================================
--- screener_results: CAN-SLIMスクリーニング結果キャッシュ
--- =====================================================
-CREATE TABLE screener_results (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL,
-
-    -- 銘柄基本情報
-    name VARCHAR(200) NOT NULL,
-
-    -- 株価情報
-    price DECIMAL(12,2) NOT NULL,
-    change_percent DECIMAL(8,2) NOT NULL,
-    volume INTEGER NOT NULL,
-    avg_volume INTEGER NOT NULL,
-    market_cap DECIMAL(20,2),
-    pe_ratio DECIMAL(10,2),
-    week_52_high DECIMAL(12,2) NOT NULL,
-    week_52_low DECIMAL(12,2) NOT NULL,
-
-    -- CAN-SLIM指標
-    eps_growth_quarterly DECIMAL(8,2),
-    eps_growth_annual DECIMAL(8,2),
-    rs_rating INTEGER NOT NULL,
-    institutional_ownership DECIMAL(6,2),
-
-    -- CAN-SLIMスコア
-    canslim_total_score INTEGER NOT NULL,
-    canslim_detail TEXT,
-
-    -- メタデータ
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT unique_screener_symbol UNIQUE (symbol)
-);
-
-COMMENT ON TABLE screener_results IS 'CAN-SLIMスクリーニング結果のキャッシュ';
-COMMENT ON COLUMN screener_results.symbol IS 'ティッカーシンボル（例: AAPL）';
-COMMENT ON COLUMN screener_results.name IS '企業名';
-COMMENT ON COLUMN screener_results.price IS '株価';
-COMMENT ON COLUMN screener_results.change_percent IS '前日比変動率（%）';
-COMMENT ON COLUMN screener_results.volume IS '出来高';
-COMMENT ON COLUMN screener_results.avg_volume IS '平均出来高';
-COMMENT ON COLUMN screener_results.market_cap IS '時価総額（USD）';
-COMMENT ON COLUMN screener_results.pe_ratio IS 'PER';
-COMMENT ON COLUMN screener_results.week_52_high IS '52週高値';
-COMMENT ON COLUMN screener_results.week_52_low IS '52週安値';
-COMMENT ON COLUMN screener_results.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
-COMMENT ON COLUMN screener_results.eps_growth_annual IS 'A: 年間EPS成長率（%）';
-COMMENT ON COLUMN screener_results.rs_rating IS 'L: RS Rating（1-99）';
-COMMENT ON COLUMN screener_results.institutional_ownership IS 'I: 機関投資家保有率（%）';
-COMMENT ON COLUMN screener_results.canslim_total_score IS 'CAN-SLIMスコア（0-100）';
-COMMENT ON COLUMN screener_results.canslim_detail IS 'CAN-SLIMスコア詳細（JSON）';
-COMMENT ON COLUMN screener_results.updated_at IS '最終更新日時';
-COMMENT ON COLUMN screener_results.created_at IS '作成日時';
-
-CREATE INDEX idx_screener_results_symbol ON screener_results(symbol);
-CREATE INDEX idx_screener_results_rs_rating ON screener_results(rs_rating DESC);
-CREATE INDEX idx_screener_results_canslim_score ON screener_results(canslim_total_score DESC);
-CREATE INDEX idx_screener_results_updated_at ON screener_results(updated_at DESC);
-
--- =====================================================
 -- watchlist: ウォッチリスト
 -- =====================================================
 CREATE TABLE watchlist (
@@ -128,37 +129,34 @@ CREATE TABLE watchlist (
     symbol VARCHAR(10) NOT NULL UNIQUE,
 
     -- 目標価格
-    target_entry_price DECIMAL(12,2),
-    stop_loss_price DECIMAL(12,2),
-    target_price DECIMAL(12,2),
+    target_entry_price DECIMAL(10,2),
+    stop_loss_price DECIMAL(10,2),
+    target_profit_price DECIMAL(10,2),
 
-    -- メモ
+    -- パターン・メモ
+    pattern_detected VARCHAR(50),
     notes TEXT,
 
-    -- ステータス
-    status VARCHAR(20) NOT NULL DEFAULT 'watching',
-    triggered_at TIMESTAMP,
+    -- アラート
+    alert_enabled BOOLEAN NOT NULL DEFAULT true,
 
     -- メタデータ
     added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT valid_watchlist_status CHECK (status IN ('watching', 'triggered', 'expired', 'removed'))
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE watchlist IS '監視銘柄リスト（CAN-SLIMスクリーニング結果）';
+COMMENT ON TABLE watchlist IS '監視銘柄リスト';
 COMMENT ON COLUMN watchlist.symbol IS 'ティッカーシンボル';
 COMMENT ON COLUMN watchlist.target_entry_price IS 'エントリー目標価格';
 COMMENT ON COLUMN watchlist.stop_loss_price IS 'ストップロス価格';
-COMMENT ON COLUMN watchlist.target_price IS '利確目標価格';
+COMMENT ON COLUMN watchlist.target_profit_price IS '利確目標価格';
+COMMENT ON COLUMN watchlist.pattern_detected IS '検出されたパターン';
 COMMENT ON COLUMN watchlist.notes IS 'メモ（エントリー理由など）';
-COMMENT ON COLUMN watchlist.status IS 'ステータス: watching/triggered/expired/removed';
-COMMENT ON COLUMN watchlist.triggered_at IS 'エントリー条件達成日時';
+COMMENT ON COLUMN watchlist.alert_enabled IS 'アラート有効';
 COMMENT ON COLUMN watchlist.added_at IS '追加日時';
 COMMENT ON COLUMN watchlist.updated_at IS '更新日時';
 
 CREATE INDEX idx_watchlist_symbol ON watchlist(symbol);
-CREATE INDEX idx_watchlist_status ON watchlist(status);
 
 -- =====================================================
 -- paper_trades: ペーパートレード記録
@@ -172,26 +170,24 @@ CREATE TABLE paper_trades (
     quantity INTEGER NOT NULL,
 
     -- エントリー
-    entry_price DECIMAL(12,2) NOT NULL,
-    entry_date TIMESTAMP NOT NULL,
+    entry_price DECIMAL(10,2) NOT NULL,
 
     -- エグジット
-    exit_price DECIMAL(12,2),
-    exit_date TIMESTAMP,
-
-    -- リスク管理
-    stop_loss_price DECIMAL(12,2),
-    target_price DECIMAL(12,2),
+    exit_price DECIMAL(10,2),
 
     -- ステータス
     status VARCHAR(20) NOT NULL DEFAULT 'open',
 
-    -- メモ
+    -- 戦略・メモ
+    strategy VARCHAR(50),
     notes TEXT,
+
+    -- タイミング
+    traded_at TIMESTAMP NOT NULL,
+    closed_at TIMESTAMP,
 
     -- メタデータ
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT valid_trade_type CHECK (trade_type IN ('buy', 'sell')),
     CONSTRAINT valid_trade_status CHECK (status IN ('open', 'closed', 'cancelled')),
@@ -204,20 +200,17 @@ COMMENT ON COLUMN paper_trades.symbol IS 'ティッカーシンボル';
 COMMENT ON COLUMN paper_trades.trade_type IS '売買種別: buy/sell';
 COMMENT ON COLUMN paper_trades.quantity IS '数量（株数）';
 COMMENT ON COLUMN paper_trades.entry_price IS 'エントリー価格';
-COMMENT ON COLUMN paper_trades.entry_date IS 'エントリー日時';
 COMMENT ON COLUMN paper_trades.exit_price IS '決済価格';
-COMMENT ON COLUMN paper_trades.exit_date IS '決済日時';
-COMMENT ON COLUMN paper_trades.stop_loss_price IS 'ストップロス価格';
-COMMENT ON COLUMN paper_trades.target_price IS '目標価格';
 COMMENT ON COLUMN paper_trades.status IS 'ステータス: open/closed/cancelled';
-COMMENT ON COLUMN paper_trades.notes IS 'メモ（エントリー/エグジット理由）';
+COMMENT ON COLUMN paper_trades.strategy IS '戦略（breakout/pullback等）';
+COMMENT ON COLUMN paper_trades.notes IS 'メモ';
+COMMENT ON COLUMN paper_trades.traded_at IS '取引日時';
+COMMENT ON COLUMN paper_trades.closed_at IS '決済日時';
 COMMENT ON COLUMN paper_trades.created_at IS '作成日時';
-COMMENT ON COLUMN paper_trades.updated_at IS '更新日時';
 
 CREATE INDEX idx_paper_trades_symbol ON paper_trades(symbol);
 CREATE INDEX idx_paper_trades_status ON paper_trades(status);
-CREATE INDEX idx_paper_trades_entry_date ON paper_trades(entry_date DESC);
-CREATE INDEX idx_paper_trades_exit_date ON paper_trades(exit_date DESC);
+CREATE INDEX idx_paper_trades_traded_at ON paper_trades(traded_at DESC);
 
 -- =====================================================
 -- price_cache: 株価データキャッシュ
@@ -253,47 +246,31 @@ COMMENT ON COLUMN price_cache.volume IS '出来高';
 CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
 
 -- =====================================================
--- refresh_jobs: スクリーニングデータ更新ジョブ
+-- job_executions: ジョブ実行履歴
 -- =====================================================
-CREATE TABLE refresh_jobs (
-    id SERIAL PRIMARY KEY,
-    job_id VARCHAR(50) NOT NULL UNIQUE,
-
-    -- ジョブ情報
-    status VARCHAR(20) NOT NULL DEFAULT 'pending',
-    source VARCHAR(20) NOT NULL DEFAULT 'custom',
-
-    -- 進捗
-    total_symbols INTEGER NOT NULL DEFAULT 0,
-    processed_count INTEGER NOT NULL DEFAULT 0,
-    succeeded_count INTEGER NOT NULL DEFAULT 0,
-    failed_count INTEGER NOT NULL DEFAULT 0,
-
-    -- エラー情報（JSON配列）
-    errors TEXT,
-
-    -- タイミング
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP,
+CREATE TABLE job_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_type VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    started_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    result JSONB,
+    error_message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT valid_job_status CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
-    CONSTRAINT valid_job_source CHECK (source IN ('sp500', 'nasdaq100', 'custom'))
+    CONSTRAINT valid_job_status CHECK (status IN ('completed', 'failed'))
 );
 
-COMMENT ON TABLE refresh_jobs IS 'スクリーニングデータ更新ジョブ管理';
-COMMENT ON COLUMN refresh_jobs.job_id IS 'ジョブID（例: refresh_20240115_103000）';
-COMMENT ON COLUMN refresh_jobs.status IS 'ステータス: pending/running/completed/failed/cancelled';
-COMMENT ON COLUMN refresh_jobs.source IS 'データソース: sp500/nasdaq100/custom';
-COMMENT ON COLUMN refresh_jobs.total_symbols IS '対象銘柄数';
-COMMENT ON COLUMN refresh_jobs.processed_count IS '処理済み銘柄数';
-COMMENT ON COLUMN refresh_jobs.succeeded_count IS '成功銘柄数';
-COMMENT ON COLUMN refresh_jobs.failed_count IS '失敗銘柄数';
-COMMENT ON COLUMN refresh_jobs.errors IS 'エラー情報（JSON配列）';
-COMMENT ON COLUMN refresh_jobs.started_at IS '開始日時';
-COMMENT ON COLUMN refresh_jobs.completed_at IS '完了日時';
-COMMENT ON COLUMN refresh_jobs.created_at IS '作成日時';
+COMMENT ON TABLE job_executions IS 'ジョブ実行履歴（完了時に1回INSERT）';
+COMMENT ON COLUMN job_executions.id IS 'ジョブID（UUID）';
+COMMENT ON COLUMN job_executions.job_type IS 'ジョブ種別（refresh_screener等）';
+COMMENT ON COLUMN job_executions.status IS '結果: completed/failed';
+COMMENT ON COLUMN job_executions.started_at IS '開始日時';
+COMMENT ON COLUMN job_executions.completed_at IS '完了日時';
+COMMENT ON COLUMN job_executions.duration_seconds IS '実行時間（秒）';
+COMMENT ON COLUMN job_executions.result IS '実行結果（JSON）';
+COMMENT ON COLUMN job_executions.error_message IS 'エラー時のメッセージ';
+COMMENT ON COLUMN job_executions.created_at IS '作成日時';
 
-CREATE INDEX idx_refresh_jobs_job_id ON refresh_jobs(job_id);
-CREATE INDEX idx_refresh_jobs_status ON refresh_jobs(status);
-CREATE INDEX idx_refresh_jobs_created_at ON refresh_jobs(created_at DESC);
+CREATE INDEX idx_job_executions_type_created ON job_executions(job_type, created_at DESC);

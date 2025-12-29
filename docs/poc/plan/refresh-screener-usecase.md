@@ -400,6 +400,90 @@ class JobChain:
 - [ ] `stocks` テーブルに `relative_strength` カラム追加
 - [ ] `rs_rating`, `canslim_score` を NULL 許容に変更
 
+#### 現状と変更点
+
+| 項目 | 現状 (init.sql) | 変更後 |
+|-----|----------------|-------|
+| テーブル名 | `screener_results` | `stocks` |
+| rs_rating | `NOT NULL` | `NULL` 許容 |
+| canslim_total_score | `NOT NULL`, 名前が異なる | `canslim_score` に変更, `NULL` 許容 |
+| relative_strength | なし | `DECIMAL(10,4)` 追加 |
+| canslim_detail | `TEXT` | 削除（不要） |
+| pe_ratio | あり | 削除（不要） |
+| industry | なし | `VARCHAR(50)` 追加 |
+| avg_volume_50d | `avg_volume` として存在 | 名前変更 |
+
+#### init.sql 修正内容
+
+```sql
+-- screener_results → stocks にテーブル名変更
+-- カラム構成を設計書に合わせる
+
+CREATE TABLE stocks (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL UNIQUE,
+    name VARCHAR(100),
+    industry VARCHAR(50),
+
+    -- 株価情報
+    price DECIMAL(10,2),
+    change_percent DECIMAL(10,2),
+    volume BIGINT,
+    avg_volume_50d BIGINT,
+    market_cap BIGINT,
+    week_52_high DECIMAL(10,2),
+    week_52_low DECIMAL(10,2),
+
+    -- CAN-SLIM指標
+    eps_growth_quarterly DECIMAL(10,2),
+    eps_growth_annual DECIMAL(10,2),
+    institutional_ownership DECIMAL(10,2),
+
+    -- RS関連（Job 1, 2 で更新）
+    relative_strength DECIMAL(10,4),  -- Job 1: 生値を保存
+    rs_rating INTEGER,                 -- Job 2: パーセンタイル計算後に更新
+
+    -- CAN-SLIMスコア（Job 3 で更新）
+    canslim_score INTEGER,
+
+    -- メタデータ
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- インデックス
+CREATE INDEX idx_stocks_symbol ON stocks(symbol);
+CREATE INDEX idx_stocks_rs_rating ON stocks(rs_rating DESC);
+CREATE INDEX idx_stocks_canslim_score ON stocks(canslim_score DESC);
+```
+
+#### job_executions テーブル
+
+```sql
+-- refresh_jobs → job_executions に変更
+-- シンプルな構造に（進捗追跡なし、完了時に1回INSERT）
+
+CREATE TABLE job_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_type VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    started_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    result JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT valid_job_status CHECK (status IN ('completed', 'failed'))
+);
+
+CREATE INDEX idx_job_executions_type_created ON job_executions(job_type, created_at DESC);
+```
+
+#### 削除対象
+
+- `refresh_jobs` テーブル（`job_executions` に置き換え）
+
 ### Phase 2: Job 1 (データ収集) リファクタリング
 
 - [ ] `CollectStockDataUseCase` 作成
