@@ -1,5 +1,10 @@
 """Job Executions - 個別ジョブ実装"""
 
+from src.jobs.executions.collect_benchmarks import (
+    CollectBenchmarksInput,
+    CollectBenchmarksJob,
+    CollectBenchmarksOutput,
+)
 from src.jobs.executions.collect_stock_data import (
     CollectInput,
     CollectOutput,
@@ -7,6 +12,11 @@ from src.jobs.executions.collect_stock_data import (
 )
 
 __all__ = [
+    # Job 0: ベンチマーク収集
+    "CollectBenchmarksInput",
+    "CollectBenchmarksOutput",
+    "CollectBenchmarksJob",
+    # Job 1: データ収集
     "CollectInput",
     "CollectOutput",
     "CollectStockDataJob",

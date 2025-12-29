@@ -977,8 +977,12 @@ backend/src/jobs/
 - 注: 旧リポジトリ（PostgresStockRepository）は互換性のため残存
 
 #### 3-5. Job 0, 1 実装
-- [ ] Job 0: `CollectBenchmarksJob` 実装
-- [ ] Job 1: ベンチマークをDBから参照するよう修正
+- [x] Job 0: `CollectBenchmarksJob` 実装
+  - S&P500, NASDAQ100 のパフォーマンスを取得
+  - market_benchmarks テーブルに保存
+- [x] Job 1: ベンチマークをDBから参照するよう修正
+  - BenchmarkRepository から DB のベンチマークを参照
+  - 新しいエンティティ/リポジトリを使用（StockIdentity, PriceSnapshot, StockMetrics）
 
 ### Phase 4: Job 2, 3 実装
 

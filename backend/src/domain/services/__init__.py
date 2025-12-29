@@ -6,6 +6,10 @@ from src.domain.services.eps_growth_calculator import (
     EPSGrowthResult,
 )
 from src.domain.services.market_analyzer import MarketAnalyzer
+from src.domain.services.relative_strength_calculator import (
+    PriceBar,
+    RelativeStrengthCalculator,
+)
 from src.domain.services.rs_rating_calculator import (
     PricePerformance,
     RSRatingCalculator,
@@ -17,7 +21,9 @@ __all__ = [
     "EPSGrowthCalculator",
     "EPSGrowthResult",
     "MarketAnalyzer",
+    "PriceBar",
     "PricePerformance",
+    "RelativeStrengthCalculator",
     "RSRatingCalculator",
     "RSRatingResult",
 ]

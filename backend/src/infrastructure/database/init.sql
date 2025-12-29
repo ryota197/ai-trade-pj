@@ -108,9 +108,11 @@ CREATE TABLE market_benchmarks (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,  -- "^GSPC" (S&P500), "^NDX" (NASDAQ100)
     performance_1y DECIMAL(10,4),
+    performance_9m DECIMAL(10,4),
     performance_6m DECIMAL(10,4),
     performance_3m DECIMAL(10,4),
     performance_1m DECIMAL(10,4),
+    weighted_performance DECIMAL(10,4),  -- IBD式加重平均（40/20/20/20）
     recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT unique_benchmark_per_day
@@ -120,9 +122,11 @@ CREATE TABLE market_benchmarks (
 COMMENT ON TABLE market_benchmarks IS '市場ベンチマーク（Job 0 で1日1回更新）';
 COMMENT ON COLUMN market_benchmarks.symbol IS '指数シンボル（^GSPC: S&P500, ^NDX: NASDAQ100）';
 COMMENT ON COLUMN market_benchmarks.performance_1y IS '1年パフォーマンス（%）';
+COMMENT ON COLUMN market_benchmarks.performance_9m IS '9ヶ月パフォーマンス（%）';
 COMMENT ON COLUMN market_benchmarks.performance_6m IS '6ヶ月パフォーマンス（%）';
 COMMENT ON COLUMN market_benchmarks.performance_3m IS '3ヶ月パフォーマンス（%）';
 COMMENT ON COLUMN market_benchmarks.performance_1m IS '1ヶ月パフォーマンス（%）';
+COMMENT ON COLUMN market_benchmarks.weighted_performance IS 'IBD式加重パフォーマンス（3M×40% + 6M×20% + 9M×20% + 12M×20%）';
 COMMENT ON COLUMN market_benchmarks.recorded_at IS '記録日時';
 
 CREATE INDEX idx_market_benchmarks_symbol_date

@@ -5,10 +5,15 @@ from datetime import datetime, timezone
 
 from src.application.interfaces.financial_data_gateway import (
     FinancialDataGateway,
-    HistoricalBar,
 )
-from src.domain.entities.stock import Stock
-from src.domain.repositories.stock_repository import StockRepository
+from src.domain.entities import PriceSnapshot, StockIdentity, StockMetrics
+from src.domain.repositories import (
+    BenchmarkRepository,
+    PriceSnapshotRepository,
+    StockIdentityRepository,
+    StockMetricsRepository,
+)
+from src.domain.services import PriceBar, RelativeStrengthCalculator
 from src.jobs.lib.base import Job
 
 
@@ -39,23 +44,32 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
     責務:
         - 株価データ取得（quote, history）
         - 財務データ取得（EPS, institutional ownership等）
-        - relative_strength 計算
-        - DBへのUPSERT
+        - 3テーブルへのINSERT（stocks, stock_prices, stock_metrics）
 
     注意:
+        - relative_strength 計算は RelativeStrengthCalculator に委譲
         - rs_rating, canslim_score は計算しない（後続ジョブに委譲）
         - 各銘柄は独立して処理（1銘柄の失敗が他に影響しない）
+        - ベンチマークは Job 0 で事前に保存されている前提
     """
 
     name = "collect_stock_data"
 
     def __init__(
         self,
-        stock_repository: StockRepository,
+        stock_identity_repository: StockIdentityRepository,
+        price_snapshot_repository: PriceSnapshotRepository,
+        stock_metrics_repository: StockMetricsRepository,
+        benchmark_repository: BenchmarkRepository,
         financial_gateway: FinancialDataGateway,
+        rs_calculator: RelativeStrengthCalculator | None = None,
     ) -> None:
-        self._stock_repo = stock_repository
+        self._identity_repo = stock_identity_repository
+        self._price_repo = price_snapshot_repository
+        self._metrics_repo = stock_metrics_repository
+        self._benchmark_repo = benchmark_repository
         self._gateway = financial_gateway
+        self._rs_calculator = rs_calculator or RelativeStrengthCalculator()
 
     async def execute(self, input_: CollectInput) -> CollectOutput:
         """ジョブ実行"""
@@ -63,17 +77,24 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
         failed = 0
         errors: list[dict] = []
 
-        # S&P500の履歴を取得（ベンチマーク）
-        try:
-            sp500_bars = await self._gateway.get_sp500_history(period="1y")
-            benchmark_perf = self._calculate_performance(sp500_bars)
-        except Exception:
-            sp500_bars = []
-            benchmark_perf = None
+        # DBからS&P500のIBD式加重パフォーマンスを取得（API呼び出しなし）
+        benchmark_weighted_perf = await self._benchmark_repo.get_latest_weighted_performance("^GSPC")
+        if benchmark_weighted_perf is None:
+            return CollectOutput(
+                processed=0,
+                succeeded=0,
+                failed=len(input_.symbols),
+                errors=[
+                    {
+                        "symbol": "*",
+                        "error": "Benchmark not found. Run Job 0 first.",
+                    }
+                ],
+            )
 
         for symbol in input_.symbols:
             try:
-                await self._process_single_symbol(symbol, benchmark_perf)
+                await self._process_single_symbol(symbol, benchmark_weighted_perf)
                 succeeded += 1
             except Exception as e:
                 failed += 1
@@ -89,9 +110,11 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
     async def _process_single_symbol(
         self,
         symbol: str,
-        benchmark_perf: float | None,
+        benchmark_weighted_perf: float,
     ) -> None:
         """単一銘柄のデータを処理"""
+        now = datetime.now(timezone.utc)
+
         # 株価データ取得
         quote = await self._gateway.get_quote(symbol)
         if quote is None:
@@ -103,19 +126,26 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
         # 株価履歴取得（relative_strength計算用）
         history = await self._gateway.get_price_history(symbol, period="1y")
 
-        # relative_strength 計算
+        # IBD式 relative_strength 計算（ドメインサービスに委譲）
         relative_strength = None
-        if benchmark_perf and history:
-            stock_perf = self._calculate_performance(history)
-            if stock_perf is not None and benchmark_perf != 0:
-                relative_strength = (stock_perf / benchmark_perf) * 100
+        if history:
+            price_bars = [PriceBar(close=bar.close) for bar in history]
+            relative_strength = self._rs_calculator.calculate_relative_strength(
+                stock_bars=price_bars,
+                benchmark_weighted_performance=benchmark_weighted_perf,
+            )
 
-        # Stockエンティティを構築して保存
-        # 注意: rs_rating, canslim_score は NULL（後続ジョブで計算）
-        stock = Stock(
+        # 1. 銘柄マスター保存
+        identity = StockIdentity(
             symbol=symbol,
             name=quote.symbol,  # TODO: 名前を別途取得
             industry=None,  # TODO: 業種を取得
+        )
+        await self._identity_repo.save(identity)
+
+        # 2. 価格スナップショット保存
+        price = PriceSnapshot(
+            symbol=symbol,
             price=quote.price,
             change_percent=quote.change_percent,
             volume=quote.volume,
@@ -123,37 +153,23 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
             market_cap=int(quote.market_cap) if quote.market_cap else None,
             week_52_high=quote.week_52_high,
             week_52_low=quote.week_52_low,
-            eps_growth_quarterly=financials.eps_growth_quarterly if financials else None,
+            recorded_at=now,
+        )
+        await self._price_repo.save(price)
+
+        # 3. 計算指標保存（rs_rating, canslim_score は NULL）
+        metrics = StockMetrics(
+            symbol=symbol,
+            eps_growth_quarterly=(
+                financials.eps_growth_quarterly if financials else None
+            ),
             eps_growth_annual=financials.eps_growth_annual if financials else None,
-            institutional_ownership=financials.institutional_ownership
-            if financials
-            else None,
+            institutional_ownership=(
+                financials.institutional_ownership if financials else None
+            ),
             relative_strength=relative_strength,
             rs_rating=None,  # Job 2 で計算
             canslim_score=None,  # Job 3 で計算
-            updated_at=datetime.now(timezone.utc),
+            calculated_at=now,
         )
-
-        await self._stock_repo.save(stock)
-
-    def _calculate_performance(self, bars: list[HistoricalBar]) -> float | None:
-        """
-        パフォーマンス（期間リターン）を計算
-
-        Args:
-            bars: 株価バーのリスト
-
-        Returns:
-            float: パフォーマンス（%）、計算不可の場合はNone
-        """
-        if not bars or len(bars) < 2:
-            return None
-
-        # 最初と最後の終値からリターンを計算
-        first_close = bars[0].close
-        last_close = bars[-1].close
-
-        if first_close == 0:
-            return None
-
-        return ((last_close - first_close) / first_close) * 100
+        await self._metrics_repo.save(metrics)

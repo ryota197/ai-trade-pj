@@ -38,15 +38,15 @@ class BenchmarkRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_latest_performance_1y(self, symbol: str) -> float | None:
+    async def get_latest_weighted_performance(self, symbol: str) -> float | None:
         """
-        最新の1年パフォーマンスを取得（Job 1用の簡易メソッド）
+        最新のIBD式加重パフォーマンスを取得（Job 1用）
 
         Args:
             symbol: 指数シンボル（例: "^GSPC"）
 
         Returns:
-            float: 1年パフォーマンス（%）、見つからない場合はNone
+            float: IBD式加重パフォーマンス（%）、見つからない場合はNone
         """
         pass
 

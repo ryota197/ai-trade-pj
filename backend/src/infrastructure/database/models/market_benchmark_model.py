@@ -21,9 +21,13 @@ class MarketBenchmarkModel(Base):
     symbol: Mapped[str] = mapped_column(String(10), nullable=False)
 
     performance_1y: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    performance_9m: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     performance_6m: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     performance_3m: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     performance_1m: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    weighted_performance: Mapped[float | None] = mapped_column(
+        Numeric(10, 4), nullable=True
+    )
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -32,4 +36,4 @@ class MarketBenchmarkModel(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<MarketBenchmark(symbol={self.symbol}, perf_1y={self.performance_1y})>"
+        return f"<MarketBenchmark(symbol={self.symbol}, weighted_perf={self.weighted_performance})>"
