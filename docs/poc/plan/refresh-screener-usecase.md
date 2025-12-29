@@ -505,35 +505,63 @@ class CollectStockDataInput:
 
 ---
 
-## Domain エンティティ設計
+## Domain 設計
 
 ### 設計方針
 
-**1エンティティ = 1ファイル** の原則に従い、責務を明確に分離する。
+**DDD（ドメイン駆動設計）** に従い、以下の原則で責務を分離する：
+
+- **1エンティティ = 1ファイル**
+- **entities/ にはEntity, Value Objectのみ配置**
+- **DTOはPresentation層（schemas/）に配置**
+- **ドメインサービスは既存のものを活用（Phase 4で整理）**
 
 ### ディレクトリ構造
 
 ```
-backend/src/domain/entities/
-├── __init__.py
-├── stock_identity.py      # 銘柄マスター
-├── price_snapshot.py      # 価格スナップショット
-├── stock_metrics.py       # 計算指標
-├── market_benchmark.py    # 市場ベンチマーク
-├── stock.py               # 銘柄集約ルート
-└── stock_summary.py       # 表示用DTO
+backend/src/domain/
+├── entities/              # Entity / Value Object
+│   ├── __init__.py
+│   ├── stock_identity.py      # Entity（Aggregate Root）
+│   ├── price_snapshot.py      # Value Object
+│   ├── stock_metrics.py       # Value Object
+│   └── market_benchmark.py    # Value Object
+│
+└── services/              # ドメインサービス（既存）
+    ├── __init__.py
+    ├── rs_rating_calculator.py    # RS Rating計算（Job 2で使用）
+    ├── eps_growth_calculator.py   # EPS成長率計算（Job 3で使用）
+    └── ...
+
+backend/src/presentation/
+└── schemas/
+    └── screener.py            # StockSummarySchema 等（既存）
 ```
 
-### 各エンティティの責務
+### 各クラスの責務
 
-| ファイル | クラス | 対応テーブル | 責務 |
-|----------|--------|-------------|------|
-| stock_identity.py | StockIdentity | stocks | 銘柄の基本情報（symbol, name, industry） |
-| price_snapshot.py | PriceSnapshot | stock_prices | 日次の株価・出来高データ |
-| stock_metrics.py | StockMetrics | stock_metrics | CAN-SLIM関連の計算指標 |
-| market_benchmark.py | MarketBenchmark | market_benchmarks | S&P500/NASDAQ100のパフォーマンス |
-| stock.py | Stock | - | 集約ルート（identity + price + metrics） |
-| stock_summary.py | StockSummary | - | 一覧表示用の簡易情報 |
+#### entities/（Domain層）
+
+| ファイル | クラス | 対応テーブル | DDD分類 |
+|----------|--------|-------------|---------|
+| stock_identity.py | StockIdentity | stocks | Entity（Aggregate Root） |
+| price_snapshot.py | PriceSnapshot | stock_prices | Value Object |
+| stock_metrics.py | StockMetrics | stock_metrics | Value Object |
+| market_benchmark.py | MarketBenchmark | market_benchmarks | Value Object |
+
+#### schemas/（Presentation層・既存）
+
+| ファイル | クラス | 用途 |
+|----------|--------|------|
+| screener.py | StockSummarySchema | 一覧表示用DTO |
+| screener.py | StockDetailSchema | 詳細表示用DTO |
+
+#### services/（ドメインサービス・既存）
+
+| ファイル | クラス | 責務 | 使用Job |
+|----------|--------|------|--------|
+| rs_rating_calculator.py | RSRatingCalculator | RS Rating計算 | Job 2 |
+| eps_growth_calculator.py | EPSGrowthCalculator | EPS成長率計算 | Job 3 |
 
 ### エンティティ定義
 
@@ -595,35 +623,6 @@ class MarketBenchmark:
     recorded_at: datetime
 ```
 
-#### stock.py
-
-```python
-@dataclass(frozen=True)
-class Stock:
-    """
-    銘柄集約ルート
-
-    画面表示やAPI応答用に各エンティティを組み合わせる。
-    """
-    identity: StockIdentity
-    price: PriceSnapshot | None = None
-    metrics: StockMetrics | None = None
-
-    @property
-    def symbol(self) -> str:
-        return self.identity.symbol
-
-    @property
-    def volume_ratio(self) -> float:
-        """出来高倍率"""
-        ...
-
-    @property
-    def distance_from_52w_high(self) -> float:
-        """52週高値からの乖離率（%）"""
-        ...
-```
-
 ---
 
 ## Repository 設計
@@ -653,7 +652,7 @@ backend/src/domain/repositories/
 | PriceSnapshotRepository | stock_prices | 価格スナップショット保存・取得 |
 | StockMetricsRepository | stock_metrics | 指標保存・Job 2, 3用更新 |
 | BenchmarkRepository | market_benchmarks | ベンチマーク保存・取得 |
-| StockQueryRepository | JOIN | スクリーニング・集約取得（読み取り専用） |
+| StockQueryRepository | JOIN | スクリーニング・集約取得（読み取り専用）→ `StockData` を返す |
 
 ### インターフェース定義
 
@@ -765,16 +764,23 @@ class BenchmarkRepository(ABC):
 #### stock_query_repository.py
 
 ```python
+@dataclass
+class StockData:
+    """クエリ結果用のデータクラス（Infrastructure層）"""
+    identity: StockIdentity
+    price: PriceSnapshot | None
+    metrics: StockMetrics | None
+
 class StockQueryRepository(ABC):
     """読み取り専用クエリリポジトリ"""
 
     @abstractmethod
-    async def get_stock(self, symbol: str) -> Stock | None:
+    async def get_stock(self, symbol: str) -> StockData | None:
         """銘柄を集約して取得（identity + price + metrics）"""
         pass
 
     @abstractmethod
-    async def get_stocks(self, symbols: list[str]) -> list[Stock]:
+    async def get_stocks(self, symbols: list[str]) -> list[StockData]:
         """複数銘柄を集約して取得"""
         pass
 
@@ -789,10 +795,12 @@ class StockQueryRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_all_for_canslim(self) -> list[Stock]:
+    async def get_all_for_canslim(self) -> list[StockData]:
         """CAN-SLIMスコア計算に必要な全銘柄を取得（Job 3用）"""
         pass
 ```
+
+**注意**: `StockData` はInfrastructure層のクエリ用データクラス。Application層で `StockSummarySchema` 等のDTOに変換する。
 
 ---
 
@@ -938,14 +946,14 @@ backend/src/jobs/
   - stock_metrics（計算指標）
   - market_benchmarks（ベンチマーク）
 
-#### 3-2. Domain エンティティ（1エンティティ = 1ファイル）
-- [ ] `stock_identity.py` - StockIdentity
-- [ ] `price_snapshot.py` - PriceSnapshot
-- [ ] `stock_metrics.py` - StockMetrics
-- [ ] `market_benchmark.py` - MarketBenchmark
-- [ ] `stock.py` - Stock（集約ルート）
-- [ ] `stock_summary.py` - StockSummary
-- [ ] `__init__.py` - エクスポート整理
+#### 3-2. Domain 設計（DDD準拠）
+- [x] `entities/stock_identity.py` - StockIdentity（Entity）
+- [x] `entities/price_snapshot.py` - PriceSnapshot（VO）
+- [x] `entities/stock_metrics.py` - StockMetrics（VO）
+- [x] `entities/market_benchmark.py` - MarketBenchmark（VO）
+- [x] `entities/__init__.py` - エクスポート整理
+- 注: DTO（StockSummarySchema等）は既存の `presentation/schemas/screener.py` を使用
+- 注: ドメインサービスは既存の `RSRatingCalculator`, `EPSGrowthCalculator` を Phase 4 で活用
 
 #### 3-3. Repository インターフェース（1テーブル = 1リポジトリ）
 - [ ] `stock_identity_repository.py` - stocks テーブル

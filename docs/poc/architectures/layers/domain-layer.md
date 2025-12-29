@@ -7,207 +7,103 @@ Domain層はクリーンアーキテクチャの最内層であり、ビジネ�
 
 ---
 
+## ディレクトリ構造
+
+```
+backend/src/domain/
+├── entities/              # Entity / Value Object
+│   ├── __init__.py
+│   ├── stock_identity.py      # Entity（Aggregate Root）
+│   ├── price_snapshot.py      # Value Object
+│   ├── stock_metrics.py       # Value Object
+│   ├── market_benchmark.py    # Value Object
+│   ├── market_status.py       # Entity
+│   └── quote.py               # Value Object
+│
+├── repositories/          # リポジトリインターフェース
+│   ├── __init__.py
+│   ├── stock_identity_repository.py
+│   ├── price_snapshot_repository.py
+│   ├── stock_metrics_repository.py
+│   ├── benchmark_repository.py
+│   └── stock_query_repository.py
+│
+└── services/              # ドメインサービス
+    ├── __init__.py
+    ├── rs_rating_calculator.py
+    ├── eps_growth_calculator.py
+    └── market_analyzer.py
+```
+
+---
+
 ## 構成要素
 
 | 要素 | 責務 | 配置場所 |
 |------|------|----------|
 | Entity | ビジネスエンティティ、識別子を持つ | `domain/entities/` |
-| Value Object | 不変の値オブジェクト | `domain/value_objects/` |
+| Value Object | 不変の値オブジェクト | `domain/entities/` |
 | Domain Service | 複数エンティティにまたがるロジック | `domain/services/` |
 | Repository Interface | データアクセスの抽象インターフェース | `domain/repositories/` |
 
 ---
 
-## コード例
+## Entities / Value Objects
 
-### Entities（エンティティ）
+### 設計方針
 
-```python
-# domain/entities/stock.py
-from dataclasses import dataclass
-from datetime import datetime
+- **1エンティティ = 1ファイル**
+- **1テーブル = 1 Entity/VO** でマッピング
+- Value Object は `frozen=True` で不変に
+- DTOは Presentation層（`schemas/`）に配置
 
-@dataclass
-class Stock:
-    """銘柄エンティティ"""
-    symbol: str
-    name: str
-    price: float
-    volume: int
-    market_cap: int
+### 現在のエンティティ
 
-    def is_large_cap(self) -> bool:
-        """大型株かどうか"""
-        return self.market_cap >= 10_000_000_000  # $10B以上
-```
+| ファイル | クラス | 対応テーブル | DDD分類 |
+|----------|--------|-------------|---------|
+| stock_identity.py | StockIdentity | stocks | Entity（Aggregate Root） |
+| price_snapshot.py | PriceSnapshot | stock_prices | Value Object |
+| stock_metrics.py | StockMetrics | stock_metrics | Value Object |
+| market_benchmark.py | MarketBenchmark | market_benchmarks | Value Object |
+| market_status.py | MarketStatus | - | Entity |
+| quote.py | Quote, HistoricalPrice | - | Value Object |
 
-```python
-# domain/entities/market_status.py
-from dataclasses import dataclass
-from enum import Enum
+---
 
-class MarketCondition(Enum):
-    RISK_ON = "risk_on"
-    RISK_OFF = "risk_off"
-    NEUTRAL = "neutral"
+## Repositories
 
-@dataclass
-class MarketStatus:
-    """マーケット状態エンティティ"""
-    condition: MarketCondition
-    confidence: float
-    vix: float
-    sp500_rsi: float
-    sp500_above_200ma: bool
+### 設計方針
 
-    def is_favorable_for_entry(self) -> bool:
-        """エントリーに適した環境か"""
-        return self.condition == MarketCondition.RISK_ON and self.confidence >= 0.6
-```
+- **1テーブル = 1リポジトリ**
+- 読み取り専用の集約操作は別途 QueryRepository として切り出す
+- インターフェースのみ定義（実装は Infrastructure層）
 
-### Value Objects（値オブジェクト）
+### リポジトリ一覧
 
-```python
-# domain/value_objects/canslim_score.py
-from dataclasses import dataclass
+| リポジトリ | テーブル | 責務 |
+|-----------|---------|------|
+| StockIdentityRepository | stocks | マスターCRUD |
+| PriceSnapshotRepository | stock_prices | 価格スナップショット保存・取得 |
+| StockMetricsRepository | stock_metrics | 指標保存・Job用更新 |
+| BenchmarkRepository | market_benchmarks | ベンチマーク保存・取得 |
+| StockQueryRepository | JOIN | スクリーニング・集約取得（読み取り専用） |
 
-@dataclass(frozen=True)
-class CANSLIMScore:
-    """CAN-SLIMスコア値オブジェクト"""
-    eps_growth_q: float      # C: Current Quarterly Earnings
-    eps_growth_y: float      # A: Annual Earnings Growth
-    is_near_high: bool       # N: New High
-    volume_ratio: float      # S: Supply and Demand
-    rs_rating: float         # L: Leader
-    institutional_holding: float  # I: Institutional
+---
 
-    def passes_canslim(self) -> bool:
-        """CAN-SLIM条件を満たすか"""
-        return (
-            self.eps_growth_q >= 25 and
-            self.eps_growth_y >= 25 and
-            self.is_near_high and
-            self.volume_ratio >= 1.5 and
-            self.rs_rating >= 80
-        )
+## Domain Services
 
-    @property
-    def total_score(self) -> int:
-        """総合スコア（0-100）"""
-        score = 0
-        if self.eps_growth_q >= 25: score += 20
-        if self.eps_growth_y >= 25: score += 20
-        if self.is_near_high: score += 15
-        if self.volume_ratio >= 1.5: score += 15
-        if self.rs_rating >= 80: score += 20
-        if self.institutional_holding >= 0: score += 10
-        return score
-```
+### 設計方針
 
-### Domain Services（ドメインサービス）
+- 複数エンティティにまたがるビジネスロジックを実装
+- 外部依存なし（純粋な計算ロジック）
 
-```python
-# domain/services/market_analyzer.py
-from domain.entities.market_status import MarketStatus, MarketCondition
+### サービス一覧
 
-class MarketAnalyzer:
-    """マーケット分析ドメインサービス"""
-
-    def determine_condition(
-        self,
-        vix: float,
-        sp500_rsi: float,
-        sp500_above_200ma: bool,
-        put_call_ratio: float
-    ) -> tuple[MarketCondition, float]:
-        """
-        複数指標からマーケット状態を判定
-
-        Returns:
-            (condition, confidence)
-        """
-        score = 0
-
-        # VIX判定
-        if vix < 20:
-            score += 2
-        elif vix > 30:
-            score -= 2
-
-        # RSI判定
-        if sp500_rsi < 30:
-            score += 2  # 売られすぎ = 買いチャンス
-        elif 30 <= sp500_rsi <= 70:
-            score += 1
-        else:
-            score -= 1
-
-        # 200MA判定
-        if sp500_above_200ma:
-            score += 1
-        else:
-            score -= 1
-
-        # Put/Call Ratio判定
-        if put_call_ratio > 1.0:
-            score += 1  # 恐怖 = 逆張りチャンス
-        elif put_call_ratio < 0.7:
-            score -= 1
-
-        # 判定
-        if score >= 3:
-            return MarketCondition.RISK_ON, min(score / 5, 1.0)
-        elif score <= -2:
-            return MarketCondition.RISK_OFF, min(abs(score) / 5, 1.0)
-        else:
-            return MarketCondition.NEUTRAL, 0.5
-```
-
-### Repository Interfaces（リポジトリインターフェース）
-
-```python
-# domain/repositories/stock_repository.py
-from abc import ABC, abstractmethod
-from domain.entities.stock import Stock
-
-class StockRepository(ABC):
-    """銘柄リポジトリのインターフェース"""
-
-    @abstractmethod
-    async def get_by_symbol(self, symbol: str) -> Stock | None:
-        pass
-
-    @abstractmethod
-    async def get_all(self, symbols: list[str]) -> list[Stock]:
-        pass
-
-    @abstractmethod
-    async def save(self, stock: Stock) -> None:
-        pass
-```
-
-```python
-# domain/repositories/market_data_repository.py
-from abc import ABC, abstractmethod
-from datetime import date
-
-class MarketDataRepository(ABC):
-    """市場データリポジトリのインターフェース"""
-
-    @abstractmethod
-    async def get_vix(self) -> float:
-        pass
-
-    @abstractmethod
-    async def get_sp500_price(self) -> float:
-        pass
-
-    @abstractmethod
-    async def get_price_history(
-        self, symbol: str, start_date: date, end_date: date
-    ) -> list[dict]:
-        pass
-```
+| サービス | 責務 | 使用箇所 |
+|----------|------|---------|
+| RSRatingCalculator | RS Rating計算 | Job 2 |
+| EPSGrowthCalculator | EPS成長率計算 | Job 3 |
+| MarketAnalyzer | マーケット状態判定 | MarketStatus生成 |
 
 ---
 
