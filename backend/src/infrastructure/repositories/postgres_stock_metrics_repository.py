@@ -45,13 +45,17 @@ class PostgresStockMetricsRepository(StockMetricsRepository):
 
         return self._to_entity(model)
 
-    async def get_all_with_relative_strength(self) -> list[tuple[str, float]]:
-        """relative_strengthを持つ全銘柄を取得（当日分）"""
-        today = func.current_date()
+    async def get_all_latest_relative_strength(self) -> list[tuple[str, float]]:
+        """全銘柄の最新 relative_strength を取得"""
+        # DISTINCT ON で各銘柄の最新レコードを取得（PostgreSQL専用）
         stmt = (
             select(StockMetricsModel.symbol, StockMetricsModel.relative_strength)
             .where(StockMetricsModel.relative_strength.isnot(None))
-            .where(func.date(StockMetricsModel.calculated_at) == today)
+            .distinct(StockMetricsModel.symbol)
+            .order_by(
+                StockMetricsModel.symbol,
+                StockMetricsModel.calculated_at.desc(),
+            )
         )
         rows = self._session.execute(stmt).all()
         return [(row[0], float(row[1])) for row in rows]

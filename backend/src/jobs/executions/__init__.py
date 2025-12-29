@@ -10,6 +10,10 @@ from src.jobs.executions.collect_stock_data import (
     CollectOutput,
     CollectStockDataJob,
 )
+from src.jobs.executions.calculate_rs_rating import (
+    CalculateRSRatingJob,
+    CalculateRSRatingOutput,
+)
 
 __all__ = [
     # Job 0: ベンチマーク収集
@@ -20,4 +24,7 @@ __all__ = [
     "CollectInput",
     "CollectOutput",
     "CollectStockDataJob",
+    # Job 2: RS Rating 計算
+    "CalculateRSRatingOutput",
+    "CalculateRSRatingJob",
 ]

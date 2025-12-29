@@ -25,8 +25,16 @@ class StockMetricsRepository(ABC):
     # ----- Job 2用 -----
 
     @abstractmethod
-    async def get_all_with_relative_strength(self) -> list[tuple[str, float]]:
-        """relative_strengthを持つ全銘柄を取得"""
+    async def get_all_latest_relative_strength(self) -> list[tuple[str, float]]:
+        """
+        全銘柄の最新 relative_strength を取得
+
+        各銘柄の最新レコードから relative_strength を取得する。
+        当日分だけでなく、全追跡銘柄を母集団としてパーセンタイル計算するため。
+
+        Returns:
+            list[tuple[str, float]]: [(symbol, relative_strength), ...]
+        """
         pass
 
     @abstractmethod
