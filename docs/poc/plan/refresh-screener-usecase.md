@@ -424,22 +424,419 @@ class JobChain:
 
 ---
 
-## 成果物
+## ジョブディレクトリ構造
+
+```
+backend/src/jobs/
+├── lib/                              # 共有ユーティリティ
+│   ├── __init__.py
+│   ├── base.py                       # ジョブ基底クラス
+│   ├── context.py                    # 実行コンテキスト
+│   └── errors.py                     # ジョブ固有エラー
+│
+├── executions/                       # 個別ジョブ実装（単一責務）
+│   ├── __init__.py
+│   ├── collect_stock_data.py         # Job 1: データ収集
+│   ├── recalculate_rs_rating.py      # Job 2: RS Rating再計算
+│   └── recalculate_canslim.py        # Job 3: CAN-SLIMスコア再計算
+│
+└── flows/                            # 複数ジョブのオーケストレーション
+    ├── __init__.py
+    └── refresh_screener.py           # 収集 → RS → CAN-SLIM フロー
+```
+
+### 層の責務
+
+| 層 | 責務 | 依存関係 |
+|---|------|---------|
+| `lib/` | 共通基盤（基底クラス、エラー、コンテキスト） | なし |
+| `executions/` | 単一ジョブ実行（1ジョブ = 1ファイル） | `lib/` のみ |
+| `flows/` | ジョブの組み合わせ・順序制御 | `executions/` |
+
+---
+
+## lib/ 設計
+
+### base.py - ジョブ基底クラス
+
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import TypeVar, Generic
+
+TInput = TypeVar("TInput")
+TOutput = TypeVar("TOutput")
+
+
+@dataclass
+class JobResult:
+    """ジョブ実行結果"""
+    success: bool
+    message: str
+    data: dict | None = None
+
+
+class Job(ABC, Generic[TInput, TOutput]):
+    """ジョブ基底クラス"""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """ジョブ識別名"""
+        pass
+
+    @abstractmethod
+    async def execute(self, input: TInput) -> TOutput:
+        """ジョブ実行（サブクラスで実装）"""
+        pass
+```
+
+### context.py - 実行コンテキスト
+
+```python
+from dataclasses import dataclass, field
+from datetime import datetime
+
+
+@dataclass
+class JobContext:
+    """ジョブ実行コンテキスト"""
+    job_id: str
+    started_at: datetime = field(default_factory=datetime.utcnow)
+
+    # 進捗管理（オプション）
+    total: int = 0
+    processed: int = 0
+
+    def update_progress(self, processed: int) -> None:
+        self.processed = processed
+```
+
+### errors.py - ジョブ固有エラー
+
+```python
+class JobError(Exception):
+    """ジョブ実行エラー基底クラス"""
+    pass
+
+
+class JobExecutionError(JobError):
+    """ジョブ実行中のエラー"""
+    def __init__(self, job_name: str, message: str):
+        self.job_name = job_name
+        super().__init__(f"[{job_name}] {message}")
+
+
+class JobSkippedError(JobError):
+    """ジョブがスキップされた"""
+    pass
+```
+
+---
+
+## executions/ 設計
+
+### collect_stock_data.py
+
+```python
+from dataclasses import dataclass
+from jobs.lib.base import Job
+
+
+@dataclass
+class CollectInput:
+    symbols: list[str]
+    source: str  # "sp500" | "nasdaq100"
+
+
+@dataclass
+class CollectOutput:
+    processed: int
+    succeeded: int
+    failed: int
+    errors: list[dict]
+
+
+class CollectStockDataJob(Job[CollectInput, CollectOutput]):
+    """データ収集ジョブ"""
+
+    name = "collect_stock_data"
+
+    def __init__(self, stock_repository, market_data_service):
+        self.stock_repository = stock_repository
+        self.market_data_service = market_data_service
+
+    async def execute(self, input: CollectInput) -> CollectOutput:
+        succeeded = 0
+        failed = 0
+        errors = []
+
+        # ベンチマーク取得
+        benchmark = await self.market_data_service.get_sp500_performance()
+
+        for symbol in input.symbols:
+            try:
+                # データ取得
+                quote = await self.market_data_service.get_quote(symbol)
+                financials = await self.market_data_service.get_financials(symbol)
+                history = await self.market_data_service.get_history(symbol)
+
+                # relative_strength 計算
+                stock_perf = self._calculate_performance(history)
+                relative_strength = stock_perf / benchmark * 100
+
+                # DB保存（rs_rating, canslim_score は NULL）
+                await self.stock_repository.upsert(
+                    symbol=symbol,
+                    quote=quote,
+                    financials=financials,
+                    relative_strength=relative_strength,
+                    rs_rating=None,
+                    canslim_score=None,
+                )
+                succeeded += 1
+
+            except Exception as e:
+                failed += 1
+                errors.append({"symbol": symbol, "error": str(e)})
+
+        return CollectOutput(
+            processed=len(input.symbols),
+            succeeded=succeeded,
+            failed=failed,
+            errors=errors,
+        )
+```
+
+### recalculate_rs_rating.py
+
+```python
+from dataclasses import dataclass
+from jobs.lib.base import Job
+
+
+@dataclass
+class RSRatingOutput:
+    updated_count: int
+
+
+class RecalculateRSRatingJob(Job[None, RSRatingOutput]):
+    """RS Rating再計算ジョブ"""
+
+    name = "recalculate_rs_rating"
+
+    def __init__(self, stock_repository):
+        self.stock_repository = stock_repository
+
+    async def execute(self, input: None = None) -> RSRatingOutput:
+        # 全銘柄の relative_strength を取得
+        stocks = await self.stock_repository.get_all_with_relative_strength()
+
+        # パーセンタイル計算
+        sorted_rs = sorted([s.relative_strength for s in stocks])
+        total = len(sorted_rs)
+
+        updates = []
+        for stock in stocks:
+            rank = sum(1 for rs in sorted_rs if rs <= stock.relative_strength)
+            percentile = (rank / total) * 100
+            rs_rating = max(1, min(99, int(percentile)))
+            updates.append((stock.symbol, rs_rating))
+
+        # 一括更新
+        await self.stock_repository.bulk_update_rs_rating(updates)
+
+        return RSRatingOutput(updated_count=len(updates))
+```
+
+### recalculate_canslim.py
+
+```python
+from dataclasses import dataclass
+from jobs.lib.base import Job
+
+
+@dataclass
+class CANSLIMOutput:
+    updated_count: int
+
+
+class RecalculateCANSLIMJob(Job[None, CANSLIMOutput]):
+    """CAN-SLIMスコア再計算ジョブ"""
+
+    name = "recalculate_canslim"
+
+    def __init__(self, stock_repository, canslim_calculator):
+        self.stock_repository = stock_repository
+        self.canslim_calculator = canslim_calculator
+
+    async def execute(self, input: None = None) -> CANSLIMOutput:
+        # 全銘柄のデータを取得
+        stocks = await self.stock_repository.get_all_for_canslim()
+
+        updates = []
+        for stock in stocks:
+            score = self.canslim_calculator.calculate(
+                eps_growth_quarterly=stock.eps_growth_quarterly,
+                eps_growth_annual=stock.eps_growth_annual,
+                distance_from_high=stock.distance_from_52w_high,
+                volume_ratio=stock.volume_ratio,
+                rs_rating=stock.rs_rating,
+                institutional_ownership=stock.institutional_ownership,
+            )
+            updates.append((stock.symbol, score))
+
+        # 一括更新
+        await self.stock_repository.bulk_update_canslim_score(updates)
+
+        return CANSLIMOutput(updated_count=len(updates))
+```
+
+---
+
+## flows/ 設計
+
+### refresh_screener.py
+
+```python
+from dataclasses import dataclass
+from jobs.executions.collect_stock_data import CollectStockDataJob, CollectInput
+from jobs.executions.recalculate_rs_rating import RecalculateRSRatingJob
+from jobs.executions.recalculate_canslim import RecalculateCANSLIMJob
+
+
+@dataclass
+class RefreshScreenerInput:
+    source: str  # "sp500" | "nasdaq100"
+
+
+@dataclass
+class FlowStepResult:
+    job_name: str
+    success: bool
+    message: str
+    data: dict | None = None
+
+
+@dataclass
+class FlowResult:
+    success: bool
+    steps: list[FlowStepResult]
+
+
+class RefreshScreenerFlow:
+    """
+    スクリーナーデータ更新フロー
+
+    実行順序:
+      1. collect_stock_data   - 外部APIからデータ収集
+      2. recalculate_rs_rating - パーセンタイル計算
+      3. recalculate_canslim   - CAN-SLIMスコア計算
+    """
+
+    def __init__(
+        self,
+        collect_job: CollectStockDataJob,
+        rs_rating_job: RecalculateRSRatingJob,
+        canslim_job: RecalculateCANSLIMJob,
+        symbol_provider,  # S&P500/NASDAQ100のシンボル取得
+    ):
+        self.collect_job = collect_job
+        self.rs_rating_job = rs_rating_job
+        self.canslim_job = canslim_job
+        self.symbol_provider = symbol_provider
+
+    async def run(self, input: RefreshScreenerInput) -> FlowResult:
+        """フロー実行"""
+        steps = []
+
+        # Step 1: データ収集
+        symbols = await self.symbol_provider.get_symbols(input.source)
+        collect_result = await self.collect_job.execute(
+            CollectInput(symbols=symbols, source=input.source)
+        )
+        steps.append(FlowStepResult(
+            job_name=self.collect_job.name,
+            success=True,
+            message=f"Collected {collect_result.succeeded}/{collect_result.processed} symbols",
+            data={
+                "succeeded": collect_result.succeeded,
+                "failed": collect_result.failed,
+                "errors": collect_result.errors,
+            },
+        ))
+
+        # Step 2: RS Rating再計算
+        rs_result = await self.rs_rating_job.execute()
+        steps.append(FlowStepResult(
+            job_name=self.rs_rating_job.name,
+            success=True,
+            message=f"Updated RS Rating for {rs_result.updated_count} symbols",
+            data={"updated_count": rs_result.updated_count},
+        ))
+
+        # Step 3: CAN-SLIMスコア再計算
+        canslim_result = await self.canslim_job.execute()
+        steps.append(FlowStepResult(
+            job_name=self.canslim_job.name,
+            success=True,
+            message=f"Updated CAN-SLIM score for {canslim_result.updated_count} symbols",
+            data={"updated_count": canslim_result.updated_count},
+        ))
+
+        return FlowResult(success=True, steps=steps)
+```
+
+---
+
+## Controller からの呼び出し
+
+```python
+# presentation/api/admin_controller.py
+
+from jobs.flows.refresh_screener import RefreshScreenerFlow, RefreshScreenerInput
+
+
+class AdminController:
+    def __init__(self, refresh_flow: RefreshScreenerFlow):
+        self.refresh_flow = refresh_flow
+
+    async def start_refresh(self, source: str) -> dict:
+        """スクリーナーデータ更新開始"""
+        # BackgroundTasksで実行
+        background_tasks.add_task(
+            self._run_refresh_flow,
+            RefreshScreenerInput(source=source)
+        )
+        return {"status": "started", "source": source}
+
+    async def _run_refresh_flow(self, input: RefreshScreenerInput):
+        result = await self.refresh_flow.run(input)
+        # ログ出力など
+        logger.info(f"Refresh flow completed: {result}")
+```
+
+---
+
+## 成果物まとめ
 
 ```
 backend/src/
-├── application/
-│   └── use_cases/
-│       └── admin/
-│           ├── collect_stock_data.py      # Job 1
-│           ├── recalculate_rs_rating.py   # Job 2
-│           └── recalculate_canslim_score.py  # Job 3
-├── domain/
-│   └── services/
-│       └── job_chain.py                   # ジョブチェーン管理
+├── jobs/                             # ジョブ専用ディレクトリ
+│   ├── lib/
+│   │   ├── base.py                   # Job 基底クラス
+│   │   ├── context.py                # 実行コンテキスト
+│   │   └── errors.py                 # エラー定義
+│   ├── executions/
+│   │   ├── collect_stock_data.py     # Job 1
+│   │   ├── recalculate_rs_rating.py  # Job 2
+│   │   └── recalculate_canslim.py    # Job 3
+│   └── flows/
+│       └── refresh_screener.py       # フロー定義
+│
 └── presentation/
     └── api/
-        └── admin_controller.py            # 更新
+        └── admin_controller.py       # API エンドポイント
 ```
 
 ---
@@ -449,3 +846,4 @@ backend/src/
 - Job 2, 3 は高速なため、フロントエンドでは「処理中」の表示のみで十分
 - 将来的にはJob 1を複数ワーカーで並列実行可能
 - Celery/ARQ導入時もジョブ単位で移行しやすい設計
+- `flows/` は将来的に他のフローも追加可能（例: `daily_market_update.py`）
