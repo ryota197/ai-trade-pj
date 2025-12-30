@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from src.domain.entities.paper_trade import PaperTrade
+from src.domain.models import PaperTrade
 from src.domain.value_objects.performance_metrics import PerformanceMetrics
 
 

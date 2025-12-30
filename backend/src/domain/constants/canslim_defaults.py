@@ -1,11 +1,11 @@
-"""CAN-SLIM スクリーニング閾値定数
+"""CAN-SLIM スクリーニングデフォルト値
 
 CAN-SLIM投資手法における各基準のデフォルト閾値を定義する。
 IBD（Investor's Business Daily）の推奨値に基づく。
 """
 
 
-class CANSLIMThresholds:
+class CANSLIMDefaults:
     """CAN-SLIMスクリーニングのデフォルト閾値"""
 
     # C - Current Quarterly Earnings

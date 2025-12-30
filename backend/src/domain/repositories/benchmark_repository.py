@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from src.domain.entities import MarketBenchmark
+from src.domain.models import MarketBenchmark
 
 
 class BenchmarkRepository(ABC):

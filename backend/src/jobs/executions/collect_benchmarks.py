@@ -7,7 +7,7 @@ from src.application.interfaces.financial_data_gateway import (
     FinancialDataGateway,
 )
 from src.domain.constants import TradingDays
-from src.domain.entities import MarketBenchmark
+from src.domain.models import MarketBenchmark
 from src.domain.repositories import BenchmarkRepository
 from src.domain.services import PriceBar, RelativeStrengthCalculator
 from src.jobs.lib.base import Job

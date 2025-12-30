@@ -151,3 +151,88 @@ class RelativeStrengthCalculator:
             return None
 
         return ((last_close - first_close) / first_close) * 100
+
+    @staticmethod
+    def calculate_percentile_rank(
+        value: float,
+        all_values: list[float],
+    ) -> int:
+        """
+        パーセンタイルランク（RS Rating）を計算
+
+        全銘柄の相対強度リストから、対象銘柄のパーセンタイル順位を算出する。
+        IBDのRS Ratingは1-99のスケールで表される。
+
+        Args:
+            value: 対象銘柄の相対強度
+            all_values: 全銘柄の相対強度リスト
+
+        Returns:
+            int: RS Rating (1-99)
+        """
+        if not all_values:
+            return 50
+
+        sorted_values = sorted(all_values)
+        n = len(sorted_values)
+
+        # パーセンタイル計算: value以下の銘柄数 / 全銘柄数 × 100
+        rank = sum(1 for v in sorted_values if v <= value)
+        percentile = (rank / n) * 100
+
+        # 1-99の範囲に収める
+        return max(1, min(99, int(percentile)))
+
+    def calculate_from_prices(
+        self,
+        stock_prices: list[float],
+        benchmark_prices: list[float],
+    ) -> tuple[float | None, int]:
+        """
+        価格リストから相対強度とRS Ratingを計算（レガシー互換）
+
+        注意: RS Ratingは推定値。正確なパーセンタイルには
+        calculate_percentile_rank() を使用すること。
+
+        Args:
+            stock_prices: 銘柄の価格リスト（古い順、最低252日分）
+            benchmark_prices: ベンチマークの価格リスト（古い順、最低252日分）
+
+        Returns:
+            tuple[float | None, int]: (相対強度, 推定RS Rating)
+        """
+        # 価格リストをPriceBarリストに変換
+        stock_bars = [PriceBar(close=p) for p in stock_prices]
+        benchmark_bars = [PriceBar(close=p) for p in benchmark_prices]
+
+        # 加重パフォーマンスを計算
+        stock_weighted = self.calculate_weighted_performance(stock_bars)
+        benchmark_weighted = self.calculate_weighted_performance(benchmark_bars)
+
+        if stock_weighted is None or benchmark_weighted is None:
+            return None, 50
+
+        # 相対強度を計算
+        relative_strength = self.calculate_relative_strength_from_performances(
+            stock_weighted, benchmark_weighted
+        )
+
+        if relative_strength is None:
+            return None, 50
+
+        # RS Ratingを推定（全銘柄リストなしの簡易計算）
+        rs_rating = self._estimate_rs_rating(relative_strength)
+
+        return relative_strength, rs_rating
+
+    @staticmethod
+    def _estimate_rs_rating(relative_strength: float) -> int:
+        """
+        相対強度からRS Ratingを推定（全銘柄リストなしの場合）
+
+        注意: これは簡易推定であり、正確なパーセンタイル計算ではない。
+        """
+        # 相対強度100を基準に線形マッピング
+        # RS 80-120 を Rating 30-70 にマッピング
+        rs_rating = int(50 + (relative_strength - 100) * 0.5)
+        return max(1, min(99, rs_rating))

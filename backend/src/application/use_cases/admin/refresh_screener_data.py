@@ -15,7 +15,7 @@ from src.application.interfaces.financial_data_gateway import FinancialDataGatew
 from src.domain.entities.stock import Stock
 from src.domain.repositories.refresh_job_repository import RefreshJob, RefreshJobRepository
 from src.domain.repositories.stock_repository import StockRepository
-from src.domain.services.rs_rating_calculator import RSRatingCalculator
+from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
 from src.domain.value_objects.canslim_score import CANSLIMScore
 
 
@@ -32,7 +32,7 @@ class RefreshScreenerDataUseCase:
         job_repository: RefreshJobRepository,
         stock_repository: StockRepository,
         financial_gateway: FinancialDataGateway,
-        rs_calculator: RSRatingCalculator,
+        rs_calculator: RelativeStrengthCalculator,
     ) -> None:
         self._job_repo = job_repository
         self._stock_repo = stock_repository
@@ -179,13 +179,10 @@ class RefreshScreenerDataUseCase:
         # RS Rating計算
         rs_rating = 50  # デフォルト
         if sp500_prices and stock_prices:
-            rs_result = self._rs_calculator.calculate_single(
-                symbol=symbol,
+            _, rs_rating = self._rs_calculator.calculate_from_prices(
                 stock_prices=stock_prices,
                 benchmark_prices=sp500_prices,
             )
-            if rs_result:
-                rs_rating = rs_result.rs_rating
 
         # CAN-SLIMスコア計算
         volume_ratio = quote.volume / quote.avg_volume if quote.avg_volume > 0 else 0

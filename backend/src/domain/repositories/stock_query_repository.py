@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from src.domain.entities import PriceSnapshot, StockIdentity, StockMetrics
+from src.domain.models import PriceSnapshot, StockIdentity, StockMetrics
 
 
 @dataclass

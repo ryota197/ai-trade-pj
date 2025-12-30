@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from src.domain.entities.market_status import MarketCondition, MarketStatus
+from src.domain.models import MarketCondition, MarketStatus
 from src.domain.value_objects.market_indicators import MarketIndicators
 
 

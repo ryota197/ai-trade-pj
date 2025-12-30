@@ -22,7 +22,7 @@ from src.application.use_cases.screener.screen_canslim_stocks import (
 )
 from src.domain.services.market_analyzer import MarketAnalyzer
 from src.domain.services.performance_calculator import PerformanceCalculator
-from src.domain.services.rs_rating_calculator import RSRatingCalculator
+from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
 from src.infrastructure.database.connection import get_db
 from src.infrastructure.external.symbol_provider import StaticSymbolProvider
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
@@ -90,7 +90,7 @@ def get_screen_canslim_use_case(
     """
     stock_repo = PostgresScreenerRepository(db)
     financial_gateway = YFinanceGateway()
-    rs_calculator = RSRatingCalculator()
+    rs_calculator = RelativeStrengthCalculator()
 
     return ScreenCANSLIMStocksUseCase(
         stock_repository=stock_repo,
@@ -220,7 +220,7 @@ def get_refresh_screener_use_case(
     job_repo = PostgresRefreshJobRepository(db)
     stock_repo = PostgresScreenerRepository(db)
     financial_gateway = YFinanceGateway()
-    rs_calculator = RSRatingCalculator()
+    rs_calculator = RelativeStrengthCalculator()
 
     return RefreshScreenerDataUseCase(
         job_repository=job_repo,

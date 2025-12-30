@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from src.application.interfaces.financial_data_gateway import (
     FinancialDataGateway,
 )
-from src.domain.entities import PriceSnapshot, StockIdentity, StockMetrics
+from src.domain.models import PriceSnapshot, StockIdentity, StockMetrics
 from src.domain.repositories import (
     BenchmarkRepository,
     PriceSnapshotRepository,

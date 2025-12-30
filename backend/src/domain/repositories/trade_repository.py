@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from src.domain.entities.paper_trade import PaperTrade, TradeStatus, TradeType
+from src.domain.models.paper_trade import PaperTrade, TradeStatus, TradeType
 
 
 class TradeRepository(ABC):

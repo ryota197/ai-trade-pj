@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from src.domain.entities import StockMetrics
+from src.domain.models import StockMetrics
 
 
 class StockMetricsRepository(ABC):

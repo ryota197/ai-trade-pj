@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from datetime import date
 
-from src.domain.entities import PriceSnapshot
+from src.domain.models import PriceSnapshot
 
 
 class PriceSnapshotRepository(ABC):

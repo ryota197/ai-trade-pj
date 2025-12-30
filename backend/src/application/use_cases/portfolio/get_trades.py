@@ -7,7 +7,7 @@ from src.application.dto.portfolio_dto import (
     TradeOutput,
 )
 from src.application.interfaces.financial_data_gateway import FinancialDataGateway
-from src.domain.entities.paper_trade import PaperTrade, TradeStatus, TradeType
+from src.domain.models.paper_trade import PaperTrade, TradeStatus, TradeType
 from src.domain.repositories.trade_repository import TradeRepository
 
 

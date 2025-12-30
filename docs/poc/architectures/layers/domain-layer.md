@@ -11,14 +11,22 @@ Domain層はクリーンアーキテクチャの最内層であり、ビジネ�
 
 ```
 backend/src/domain/
-├── entities/              # Entity / Value Object
+├── models/                # Entity / Value Object（ドメインモデル）
 │   ├── __init__.py
 │   ├── stock_identity.py      # Entity（Aggregate Root）
 │   ├── price_snapshot.py      # Value Object
 │   ├── stock_metrics.py       # Value Object
 │   ├── market_benchmark.py    # Value Object
 │   ├── market_status.py       # Entity
-│   └── quote.py               # Value Object
+│   ├── quote.py               # Value Object
+│   ├── watchlist_item.py      # Entity
+│   ├── paper_trade.py         # Entity
+│   └── canslim_config.py      # Value Object（スコア計算設定）
+│
+├── constants/             # ドメイン固有の定数
+│   ├── __init__.py
+│   ├── trading_days.py        # 営業日数定数
+│   └── canslim_defaults.py    # スクリーニングデフォルト値
 │
 ├── repositories/          # リポジトリインターフェース
 │   ├── __init__.py
@@ -28,11 +36,16 @@ backend/src/domain/
 │   ├── benchmark_repository.py
 │   └── stock_query_repository.py
 │
-└── services/              # ドメインサービス
-    ├── __init__.py
-    ├── rs_rating_calculator.py
-    ├── eps_growth_calculator.py
-    └── market_analyzer.py
+├── services/              # ドメインサービス
+│   ├── __init__.py
+│   ├── relative_strength_calculator.py  # RS計算（IBD式）
+│   ├── canslim_score_calculator.py      # CAN-SLIMスコア計算
+│   ├── eps_growth_calculator.py
+│   ├── performance_calculator.py
+│   └── market_analyzer.py
+│
+└── entities/              # [非推奨] 後方互換用re-export
+    └── __init__.py            # models/, constants/ からre-export
 ```
 
 ---
@@ -41,14 +54,15 @@ backend/src/domain/
 
 | 要素 | 責務 | 配置場所 |
 |------|------|----------|
-| Entity | ビジネスエンティティ、識別子を持つ | `domain/entities/` |
-| Value Object | 不変の値オブジェクト | `domain/entities/` |
+| Entity | ビジネスエンティティ、識別子を持つ | `domain/models/` |
+| Value Object | 不変の値オブジェクト | `domain/models/` |
+| 定数クラス | ドメイン固有の定数定義 | `domain/constants/` |
 | Domain Service | 複数エンティティにまたがるロジック | `domain/services/` |
 | Repository Interface | データアクセスの抽象インターフェース | `domain/repositories/` |
 
 ---
 
-## Entities / Value Objects
+## Models（Entity / Value Object）
 
 ### 設計方針
 
@@ -57,7 +71,7 @@ backend/src/domain/
 - Value Object は `frozen=True` で不変に
 - DTOは Presentation層（`schemas/`）に配置
 
-### 現在のエンティティ
+### モデル一覧
 
 | ファイル | クラス | 対応テーブル | DDD分類 |
 |----------|--------|-------------|---------|
@@ -67,6 +81,26 @@ backend/src/domain/
 | market_benchmark.py | MarketBenchmark | market_benchmarks | Value Object |
 | market_status.py | MarketStatus | - | Entity |
 | quote.py | Quote, HistoricalPrice | - | Value Object |
+| watchlist_item.py | WatchlistItem | watchlist_items | Entity |
+| paper_trade.py | PaperTrade | paper_trades | Entity |
+| canslim_config.py | CANSLIMWeights, CANSLIMScoreThresholds | - | Value Object |
+
+---
+
+## Constants（定数クラス）
+
+### 設計方針
+
+- 将来変わることがない固定値を定義
+- インスタンス化しない（クラス変数のみ）
+- Value Objectとの違い: コンストラクタで値を変更できない
+
+### 定数一覧
+
+| ファイル | クラス | 用途 |
+|----------|--------|------|
+| trading_days.py | TradingDays | 営業日数（YEAR=252, MONTH_3=63 等） |
+| canslim_defaults.py | CANSLIMDefaults | スクリーニングのデフォルト閾値 |
 
 ---
 
@@ -96,13 +130,16 @@ backend/src/domain/
 
 - 複数エンティティにまたがるビジネスロジックを実装
 - 外部依存なし（純粋な計算ロジック）
+- 設定値はValue Objectとしてコンストラクタで注入
 
 ### サービス一覧
 
 | サービス | 責務 | 使用箇所 |
 |----------|------|---------|
-| RSRatingCalculator | RS Rating計算 | Job 2 |
-| EPSGrowthCalculator | EPS成長率計算 | Job 3 |
+| RelativeStrengthCalculator | IBD式相対強度・RS Rating計算 | Job 0, Job 2 |
+| CANSLIMScoreCalculator | CAN-SLIMスコア計算（C/A/N/S/L/I） | Job 3 |
+| EPSGrowthCalculator | EPS成長率計算 | Job 1 |
+| PerformanceCalculator | パフォーマンス計算 | 各種分析 |
 | MarketAnalyzer | マーケット状態判定 | MarketStatus生成 |
 
 ---

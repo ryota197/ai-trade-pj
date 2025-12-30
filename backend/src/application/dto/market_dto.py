@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.domain.entities.market_status import MarketCondition
+from src.domain.models import MarketCondition
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 
 from src.domain.repositories import StockMetricsRepository
-from src.domain.services import RSRatingCalculator
+from src.domain.services import RelativeStrengthCalculator
 from src.jobs.lib.base import Job
 
 
@@ -25,7 +25,7 @@ class CalculateRSRatingJob(Job[None, CalculateRSRatingOutput]):
 
     責務:
         - DB内の全銘柄の最新 relative_strength を取得
-        - パーセンタイル計算（RSRatingCalculator に委譲）
+        - パーセンタイル計算（RelativeStrengthCalculator に委譲）
         - stock_metrics.rs_rating を一括更新
 
     注意:
@@ -39,10 +39,10 @@ class CalculateRSRatingJob(Job[None, CalculateRSRatingOutput]):
     def __init__(
         self,
         stock_metrics_repository: StockMetricsRepository,
-        rs_calculator: RSRatingCalculator | None = None,
+        rs_calculator: RelativeStrengthCalculator | None = None,
     ) -> None:
         self._metrics_repo = stock_metrics_repository
-        self._rs_calculator = rs_calculator or RSRatingCalculator()
+        self._rs_calculator = rs_calculator or RelativeStrengthCalculator()
 
     async def execute(self, _: None = None) -> CalculateRSRatingOutput:
         """ジョブ実行"""
@@ -65,7 +65,7 @@ class CalculateRSRatingJob(Job[None, CalculateRSRatingOutput]):
         updates: list[tuple[str, int]] = []
         for symbol, relative_strength in stocks_with_rs:
             try:
-                rs_rating = self._rs_calculator.calculate_rs_rating(
+                rs_rating = self._rs_calculator.calculate_percentile_rank(
                     relative_strength, all_relative_strengths
                 )
                 updates.append((symbol, rs_rating))

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from src.domain.entities.paper_trade import PaperTrade, TradeStatus, TradeType
+from src.domain.models.paper_trade import PaperTrade, TradeStatus, TradeType
 from src.domain.repositories.trade_repository import TradeRepository
 from src.infrastructure.database.models.paper_trade_model import PaperTradeModel
 

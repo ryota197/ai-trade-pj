@@ -1,22 +1,47 @@
-"""Domain Entities（Entity / Value Object）"""
+"""Domain Entities - 後方互換性のためのre-export
 
-from src.domain.entities.market_benchmark import MarketBenchmark
-from src.domain.entities.market_status import MarketCondition, MarketStatus
-from src.domain.entities.price_snapshot import PriceSnapshot
-from src.domain.entities.quote import HistoricalPrice, Quote
-from src.domain.entities.stock_identity import StockIdentity
-from src.domain.entities.stock_metrics import StockMetrics
+注意: このモジュールは非推奨です。
+- Entity/Value Object は `src.domain.models` からインポートしてください
+- 定数は `src.domain.constants` からインポートしてください
+"""
+
+# Models（Entity / Value Object）
+from src.domain.models import (
+    CANSLIMScoreThresholds,
+    CANSLIMWeights,
+    HistoricalPrice,
+    MarketBenchmark,
+    MarketCondition,
+    MarketStatus,
+    PaperTrade,
+    PriceSnapshot,
+    Quote,
+    StockIdentity,
+    StockMetrics,
+    WatchlistItem,
+)
+
+# Constants
+from src.domain.constants import (
+    CANSLIMDefaults,
+    TradingDays,
+)
 
 __all__ = [
-    # 銘柄関連（Entity / Value Object）
+    # Models
     "StockIdentity",
     "PriceSnapshot",
     "StockMetrics",
-    # 価格関連
     "Quote",
     "HistoricalPrice",
-    # マーケット関連
     "MarketBenchmark",
     "MarketCondition",
     "MarketStatus",
+    "CANSLIMWeights",
+    "CANSLIMScoreThresholds",
+    "WatchlistItem",
+    "PaperTrade",
+    # Constants
+    "CANSLIMDefaults",
+    "TradingDays",
 ]

@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from src.domain.entities.market_status import MarketStatus
+from src.domain.models import MarketStatus
 
 
 class MarketSnapshotRepository(ABC):

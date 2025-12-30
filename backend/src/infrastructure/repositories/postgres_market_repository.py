@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.domain.entities.market_status import MarketCondition, MarketStatus
+from src.domain.models import MarketCondition, MarketStatus
 from src.domain.repositories.market_snapshot_repository import MarketSnapshotRepository
 from src.domain.value_objects.market_indicators import (
     MarketIndicators,

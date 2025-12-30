@@ -12,7 +12,7 @@ from src.domain.repositories.stock_repository import (
     ScreenerFilter,
     StockRepository,
 )
-from src.domain.services.rs_rating_calculator import RSRatingCalculator
+from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
 from src.domain.value_objects.canslim_score import CANSLIMScore
 
 
@@ -28,7 +28,7 @@ class ScreenCANSLIMStocksUseCase:
         self,
         stock_repository: StockRepository,
         financial_gateway: FinancialDataGateway,
-        rs_calculator: RSRatingCalculator,
+        rs_calculator: RelativeStrengthCalculator,
     ) -> None:
         self._stock_repo = stock_repository
         self._financial_gateway = financial_gateway
@@ -125,12 +125,10 @@ class ScreenCANSLIMStocksUseCase:
                 stock_prices = [bar.close for bar in history]
 
                 # RS Rating計算
-                rs_result = self._rs_calculator.calculate_single(
-                    symbol=symbol,
+                _, rs_rating = self._rs_calculator.calculate_from_prices(
                     stock_prices=stock_prices,
                     benchmark_prices=sp500_prices,
                 )
-                rs_rating = rs_result.rs_rating if rs_result else 50
 
                 # CAN-SLIMスコア計算
                 volume_ratio = (

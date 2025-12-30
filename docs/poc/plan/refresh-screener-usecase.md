@@ -215,7 +215,7 @@ CREATE INDEX idx_job_executions_type_created
 │                                                                             │
 │                              ↓ 完了後に自動実行                              │
 │                                                                             │
-│  【Job 2】RS Rating 再計算ジョブ (RecalculateRSRatingJob)                   │
+│  【Job 2】RS Rating 計算ジョブ (CalculateRSRatingJob)                       │
 │    ─────────────────────────────────────────                                │
 │    目的: DB内の全銘柄でパーセンタイルランキングを計算                         │
 │    特徴:                                                                    │
@@ -226,7 +226,7 @@ CREATE INDEX idx_job_executions_type_created
 │                                                                             │
 │                              ↓ 完了後に自動実行                              │
 │                                                                             │
-│  【Job 3】CAN-SLIMスコア再計算ジョブ (RecalculateCANSLIMScoreJob)            │
+│  【Job 3】CAN-SLIMスコア計算ジョブ (CalculateCANSLIMJob)                     │
 │    ─────────────────────────────────────────                                │
 │    目的: DB内のデータを元にCAN-SLIMスコアを計算                              │
 │    特徴:                                                                    │
@@ -274,7 +274,7 @@ CREATE INDEX idx_job_executions_type_created
 │
 ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ Job 2: RecalculateRSRating (数秒)                                          │
+│ Job 2: CalculateRSRating (数秒)                                            │
 │ ┌────────────────────────────────────────────────────────────────────────┐ │
 │ │ 1. 全銘柄の relative_strength 取得                                      │ │
 │ │ 2. パーセンタイル計算 → rs_rating (1-99)                                │ │
@@ -284,7 +284,7 @@ CREATE INDEX idx_job_executions_type_created
 │
 ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ Job 3: RecalculateCANSLIM (数秒)                                           │
+│ Job 3: CalculateCANSLIM (数秒)                                             │
 │ ┌────────────────────────────────────────────────────────────────────────┐ │
 │ │ 1. 全銘柄のスコア計算に必要なデータ取得                                  │ │
 │ │ 2. CAN-SLIMスコア計算 (0-100)                                           │ │
@@ -986,8 +986,8 @@ backend/src/jobs/
 
 ### Phase 4: Job 2, 3 実装
 
-- [ ] Job 2: `RecalculateRSRatingJob` 実装
-- [ ] Job 3: `RecalculateCANSLIMJob` 実装
+- [x] Job 2: `CalculateRSRatingJob` 実装
+- [x] Job 3: `CalculateCANSLIMJob` 実装
 - [ ] Flow を4ジョブ構成に更新
 
 ### Phase 5: API・フロントエンド更新

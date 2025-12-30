@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from src.domain.entities import StockIdentity
+from src.domain.models import StockIdentity
 
 
 class StockIdentityRepository(ABC):

@@ -11,7 +11,7 @@ from src.application.interfaces.financial_data_gateway import (
     QuoteData,
     RawFinancialData,
 )
-from src.domain.entities.quote import HistoricalPrice, Quote
+from src.domain.models import HistoricalPrice, Quote
 from src.domain.services.eps_growth_calculator import EPSData, EPSGrowthCalculator
 
 
