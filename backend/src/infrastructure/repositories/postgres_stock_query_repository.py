@@ -4,11 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
-from src.domain.entities import PriceSnapshot, StockIdentity, StockMetrics
+from src.domain.models import PriceSnapshot, StockIdentity, StockMetrics
 from src.domain.repositories import (
     ScreenerFilter,
     ScreenerResult,
-    StockData,
+    StockAggregate,
     StockQueryRepository,
 )
 from src.infrastructure.database.models import (
@@ -24,7 +24,7 @@ class PostgresStockQueryRepository(StockQueryRepository):
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    async def get_stock(self, symbol: str) -> StockData | None:
+    async def get_stock(self, symbol: str) -> StockAggregate | None:
         """銘柄を集約して取得"""
         upper_symbol = symbol.upper()
 
@@ -53,13 +53,13 @@ class PostgresStockQueryRepository(StockQueryRepository):
         )
         metrics_model = self._session.scalars(metrics_stmt).first()
 
-        return StockData(
-            identity=self._to_identity(stock_model),
-            price=self._to_price(price_model) if price_model else None,
-            metrics=self._to_metrics(metrics_model) if metrics_model else None,
+        return (
+            self._to_identity(stock_model),
+            self._to_price(price_model) if price_model else None,
+            self._to_metrics(metrics_model) if metrics_model else None,
         )
 
-    async def get_stocks(self, symbols: list[str]) -> list[StockData]:
+    async def get_stocks(self, symbols: list[str]) -> list[StockAggregate]:
         """複数銘柄を集約して取得"""
         result = []
         for symbol in symbols:
@@ -120,18 +120,18 @@ class PostgresStockQueryRepository(StockQueryRepository):
 
         rows = self._session.execute(stmt).all()
 
-        stocks = [
-            StockData(
-                identity=self._to_identity(row[0]),
-                price=self._to_price(row[1]),
-                metrics=self._to_metrics(row[2]),
+        stocks: list[StockAggregate] = [
+            (
+                self._to_identity(row[0]),
+                self._to_price(row[1]),
+                self._to_metrics(row[2]),
             )
             for row in rows
         ]
 
         return ScreenerResult(total_count=total_count, stocks=stocks)
 
-    async def get_all_for_canslim(self) -> list[StockData]:
+    async def get_all_for_canslim(self) -> list[StockAggregate]:
         """CAN-SLIMスコア計算に必要な全銘柄を取得"""
         today = func.current_date()
 
@@ -147,10 +147,10 @@ class PostgresStockQueryRepository(StockQueryRepository):
         rows = self._session.execute(stmt).all()
 
         return [
-            StockData(
-                identity=self._to_identity(row[0]),
-                price=self._to_price(row[1]),
-                metrics=self._to_metrics(row[2]),
+            (
+                self._to_identity(row[0]),
+                self._to_price(row[1]),
+                self._to_metrics(row[2]),
             )
             for row in rows
         ]

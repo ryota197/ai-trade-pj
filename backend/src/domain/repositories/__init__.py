@@ -7,7 +7,7 @@ from src.domain.repositories.stock_metrics_repository import StockMetricsReposit
 from src.domain.repositories.stock_query_repository import (
     ScreenerFilter,
     ScreenerResult,
-    StockData,
+    StockAggregate,
     StockQueryRepository,
 )
 
@@ -19,7 +19,7 @@ __all__ = [
     "BenchmarkRepository",
     # クエリ リポジトリ（読み取り専用）
     "StockQueryRepository",
-    "StockData",
+    "StockAggregate",
     "ScreenerFilter",
     "ScreenerResult",
 ]

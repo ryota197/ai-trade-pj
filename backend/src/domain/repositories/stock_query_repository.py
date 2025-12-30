@@ -2,17 +2,12 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TypeAlias
 
 from src.domain.models import PriceSnapshot, StockIdentity, StockMetrics
 
-
-@dataclass
-class StockData:
-    """クエリ結果用のデータクラス"""
-
-    identity: StockIdentity
-    price: PriceSnapshot | None
-    metrics: StockMetrics | None
+# 集約クエリ結果の型エイリアス（既存ドメインモデルの組み合わせ）
+StockAggregate: TypeAlias = tuple[StockIdentity, PriceSnapshot | None, StockMetrics | None]
 
 
 @dataclass(frozen=True)
@@ -32,7 +27,7 @@ class ScreenerResult:
     """スクリーニング結果"""
 
     total_count: int
-    stocks: list[StockData]
+    stocks: list[StockAggregate]
 
 
 class StockQueryRepository(ABC):
@@ -43,12 +38,12 @@ class StockQueryRepository(ABC):
     """
 
     @abstractmethod
-    async def get_stock(self, symbol: str) -> StockData | None:
+    async def get_stock(self, symbol: str) -> StockAggregate | None:
         """銘柄を集約して取得（identity + price + metrics）"""
         pass
 
     @abstractmethod
-    async def get_stocks(self, symbols: list[str]) -> list[StockData]:
+    async def get_stocks(self, symbols: list[str]) -> list[StockAggregate]:
         """複数銘柄を集約して取得"""
         pass
 
@@ -63,6 +58,6 @@ class StockQueryRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_all_for_canslim(self) -> list[StockData]:
+    async def get_all_for_canslim(self) -> list[StockAggregate]:
         """CAN-SLIMスコア計算に必要な全銘柄を取得（Job 3用）"""
         pass
