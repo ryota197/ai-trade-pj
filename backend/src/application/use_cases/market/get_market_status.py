@@ -5,7 +5,7 @@ from datetime import datetime
 from src.application.dto.market_dto import MarketIndicatorsOutput, MarketStatusOutput
 from src.domain.repositories.market_data_repository import MarketDataRepository
 from src.domain.services.market_analyzer import MarketAnalyzer
-from src.domain.value_objects.market_indicators import (
+from src.domain.models import (
     MarketIndicators,
     MovingAverageIndicator,
     PutCallRatioIndicator,

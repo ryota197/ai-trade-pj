@@ -9,7 +9,7 @@ from src.application.dto.portfolio_dto import (
 )
 from src.domain.repositories.trade_repository import TradeRepository
 from src.domain.services.performance_calculator import PerformanceCalculator
-from src.domain.value_objects.performance_metrics import PerformanceMetrics
+from src.domain.models import PerformanceMetrics
 
 
 class GetPerformanceUseCase:

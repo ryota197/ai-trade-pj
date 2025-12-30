@@ -1,15 +1,18 @@
-"""Domain Value Objects"""
+"""Domain Value Objects - 後方互換性のためのre-export
 
-from src.domain.value_objects.canslim_score import (
+注意: このモジュールは非推奨です。
+Value Object は `src.domain.models` からインポートしてください。
+"""
+
+from src.domain.models import (
     CANSLIMCriteria,
     CANSLIMScore,
-    ScoreGrade,
-)
-from src.domain.value_objects.market_indicators import (
     MarketIndicators,
     MovingAverageIndicator,
+    PerformanceMetrics,
     PutCallRatioIndicator,
     RsiIndicator,
+    ScoreGrade,
     SignalType,
     VixIndicator,
 )
@@ -24,4 +27,5 @@ __all__ = [
     "RsiIndicator",
     "SignalType",
     "VixIndicator",
+    "PerformanceMetrics",
 ]

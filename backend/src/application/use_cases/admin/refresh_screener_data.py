@@ -16,7 +16,7 @@ from src.domain.entities.stock import Stock
 from src.domain.repositories.refresh_job_repository import RefreshJob, RefreshJobRepository
 from src.domain.repositories.stock_repository import StockRepository
 from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
-from src.domain.value_objects.canslim_score import CANSLIMScore
+from src.domain.models import CANSLIMScore
 
 
 class RefreshScreenerDataUseCase:

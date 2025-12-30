@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from src.domain.value_objects.market_indicators import MarketIndicators
+from src.domain.models.market_indicators import MarketIndicators
 
 
 class MarketCondition(Enum):

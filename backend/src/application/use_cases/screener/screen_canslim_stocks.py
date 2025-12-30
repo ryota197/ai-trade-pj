@@ -13,7 +13,7 @@ from src.domain.repositories.stock_repository import (
     StockRepository,
 )
 from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
-from src.domain.value_objects.canslim_score import CANSLIMScore
+from src.domain.models import CANSLIMScore
 
 
 class ScreenCANSLIMStocksUseCase:

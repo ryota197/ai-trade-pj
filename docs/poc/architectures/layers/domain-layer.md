@@ -18,10 +18,13 @@ backend/src/domain/
 │   ├── stock_metrics.py       # Value Object
 │   ├── market_benchmark.py    # Value Object
 │   ├── market_status.py       # Entity
+│   ├── market_indicators.py   # Value Object（マーケット指標）
 │   ├── quote.py               # Value Object
 │   ├── watchlist_item.py      # Entity
 │   ├── paper_trade.py         # Entity
-│   └── canslim_config.py      # Value Object（スコア計算設定）
+│   ├── canslim_config.py      # Value Object（スコア計算設定）
+│   ├── canslim_score.py       # Value Object（CAN-SLIMスコア詳細）
+│   └── performance_metrics.py # Value Object（パフォーマンス指標）
 │
 ├── constants/             # ドメイン固有の定数
 │   ├── __init__.py
@@ -44,8 +47,11 @@ backend/src/domain/
 │   ├── performance_calculator.py
 │   └── market_analyzer.py
 │
-└── entities/              # [非推奨] 後方互換用re-export
-    └── __init__.py            # models/, constants/ からre-export
+├── entities/              # [非推奨] 後方互換用re-export
+│   └── __init__.py            # models/, constants/ からre-export
+│
+└── value_objects/         # [非推奨] 後方互換用re-export
+    └── __init__.py            # models/ からre-export
 ```
 
 ---
@@ -79,11 +85,14 @@ backend/src/domain/
 | price_snapshot.py | PriceSnapshot | stock_prices | Value Object |
 | stock_metrics.py | StockMetrics | stock_metrics | Value Object |
 | market_benchmark.py | MarketBenchmark | market_benchmarks | Value Object |
-| market_status.py | MarketStatus | - | Entity |
+| market_status.py | MarketStatus, MarketCondition | - | Entity |
+| market_indicators.py | MarketIndicators, VixIndicator 等 | - | Value Object |
 | quote.py | Quote, HistoricalPrice | - | Value Object |
 | watchlist_item.py | WatchlistItem | watchlist_items | Entity |
 | paper_trade.py | PaperTrade | paper_trades | Entity |
 | canslim_config.py | CANSLIMWeights, CANSLIMScoreThresholds | - | Value Object |
+| canslim_score.py | CANSLIMScore, CANSLIMCriteria | - | Value Object |
+| performance_metrics.py | PerformanceMetrics | - | Value Object |
 
 ---
 
