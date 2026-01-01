@@ -202,38 +202,6 @@ CREATE INDEX idx_trades_status ON trades(status);
 CREATE INDEX idx_trades_traded_at ON trades(traded_at DESC);
 
 -- =====================================================
--- price_cache: 株価データキャッシュ
--- =====================================================
-CREATE TABLE price_cache (
-    symbol VARCHAR(10) NOT NULL,
-    date DATE NOT NULL,
-
-    -- OHLCV
-    open DECIMAL(10,2),
-    high DECIMAL(10,2),
-    low DECIMAL(10,2),
-    close DECIMAL(10,2),
-    adj_close DECIMAL(10,2),
-    volume BIGINT,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (symbol, date)
-);
-
-COMMENT ON TABLE price_cache IS '株価データキャッシュ（API呼び出し削減用）';
-COMMENT ON COLUMN price_cache.symbol IS 'ティッカーシンボル';
-COMMENT ON COLUMN price_cache.date IS '取引日';
-COMMENT ON COLUMN price_cache.open IS '始値';
-COMMENT ON COLUMN price_cache.high IS '高値';
-COMMENT ON COLUMN price_cache.low IS '安値';
-COMMENT ON COLUMN price_cache.close IS '終値';
-COMMENT ON COLUMN price_cache.adj_close IS '調整後終値（分割・配当調整済み）';
-COMMENT ON COLUMN price_cache.volume IS '出来高';
-
-CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
-
--- =====================================================
 -- job_executions: ジョブ実行履歴
 -- =====================================================
 CREATE TABLE job_executions (

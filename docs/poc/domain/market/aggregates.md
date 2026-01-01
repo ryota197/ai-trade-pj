@@ -241,7 +241,7 @@ package "Screener Context" {
 MS --> CS : "M評価に使用\n(MarketCondition)"
 
 note right of CS
-  RS計算は price_cache から
+  RS計算は yfinance API から
   S&P500価格履歴を取得して計算
 end note
 
@@ -279,4 +279,4 @@ Screener が Market に依存する形（Conformist パターン）
 | 日付 | 内容 |
 |------|------|
 | 2025-01-01 | 初版作成 |
-| 2025-01-01 | Benchmark 集約を削除（price_cache で代替）|
+| 2025-01-01 | Benchmark 集約を削除（API から都度取得）|

@@ -274,8 +274,8 @@ COMMENT ON TABLE market_snapshots IS '市場状態スナップショット';
 | watchlist | watchlist | 変更なし |
 | paper_trades | trades | リネーム |
 | market_snapshots | market_snapshots | 一部カラム削除 |
-| market_benchmarks | 廃止 | price_cache で代替 |
-| price_cache | price_cache | 維持 |
+| market_benchmarks | 廃止 | API から都度取得 |
+| price_cache | 廃止 | API から都度取得 |
 | job_executions | job_executions | 維持 |
 
 ---
@@ -284,7 +284,7 @@ COMMENT ON TABLE market_snapshots IS '市場状態スナップショット';
 
 | アンチパターン | 対策 | 実装 |
 |---------------|------|------|
-| IDリクワイアド | 複合主キー | canslim_stocks, price_cache |
+| IDリクワイアド | 複合主キー | canslim_stocks |
 | キーレスエントリ | FK制約 | （canslim_stocks は単独で完結）|
 | EAV | 個別カラム | score_c, score_a, ... |
 | 過剰な正規化 | テーブル統合 | 3テーブル → 1テーブル |
@@ -320,4 +320,5 @@ docker-compose up -d
 |------|------|
 | 2025-01-01 | 初版作成 |
 | 2025-01-01 | screened_stocks → canslim_stocks にリネーム |
-| 2025-01-01 | benchmarks テーブル削除（price_cache で代替）|
+| 2025-01-01 | benchmarks テーブル削除（API から都度取得）|
+| 2025-01-01 | price_cache テーブル削除（API から都度取得）|
