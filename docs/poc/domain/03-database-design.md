@@ -93,19 +93,6 @@ entity "market_snapshots" as MS {
     score : INTEGER
 }
 
-entity "benchmarks" as BM {
-    * symbol : VARCHAR(10) <<PK>>
-    * date : DATE <<PK>>
-    --
-    performance_1y : DECIMAL(10,4)
-    performance_9m : DECIMAL(10,4)
-    performance_6m : DECIMAL(10,4)
-    performance_3m : DECIMAL(10,4)
-    performance_1m : DECIMAL(10,4)
-    weighted_performance : DECIMAL(10,4)
-    recorded_at : TIMESTAMP
-}
-
 @enduml
 ```
 
@@ -276,36 +263,6 @@ COMMENT ON TABLE market_snapshots IS '市場状態スナップショット';
 
 ---
 
-### 5. benchmarks（Market Context）
-
-**ドメインモデル:** Benchmark 集約
-
-```sql
-CREATE TABLE benchmarks (
-    symbol VARCHAR(10) NOT NULL,
-    date DATE NOT NULL,
-
-    -- パフォーマンス
-    performance_1y DECIMAL(10,4),
-    performance_9m DECIMAL(10,4),
-    performance_6m DECIMAL(10,4),
-    performance_3m DECIMAL(10,4),
-    performance_1m DECIMAL(10,4),
-    weighted_performance DECIMAL(10,4),
-
-    -- メタデータ
-    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (symbol, date)
-);
-
-CREATE INDEX idx_benchmarks_symbol_date ON benchmarks(symbol, date DESC);
-
-COMMENT ON TABLE benchmarks IS '市場ベンチマーク（S&P500, NASDAQ100）';
-```
-
----
-
 ## 現行テーブルとの比較
 
 | 現行 | 新設計 | 変更点 |
@@ -317,9 +274,9 @@ COMMENT ON TABLE benchmarks IS '市場ベンチマーク（S&P500, NASDAQ100）'
 | watchlist | watchlist | 変更なし |
 | paper_trades | trades | リネーム |
 | market_snapshots | market_snapshots | 一部カラム削除 |
-| market_benchmarks | benchmarks | リネーム、複合PK |
-| price_cache | 検討中 | 別途判断 |
-| job_executions | 維持 | 変更なし |
+| market_benchmarks | 廃止 | price_cache で代替 |
+| price_cache | price_cache | 維持 |
+| job_executions | job_executions | 維持 |
 
 ---
 
@@ -327,7 +284,7 @@ COMMENT ON TABLE benchmarks IS '市場ベンチマーク（S&P500, NASDAQ100）'
 
 | アンチパターン | 対策 | 実装 |
 |---------------|------|------|
-| IDリクワイアド | 複合主キー | canslim_stocks, benchmarks |
+| IDリクワイアド | 複合主キー | canslim_stocks, price_cache |
 | キーレスエントリ | FK制約 | （canslim_stocks は単独で完結）|
 | EAV | 個別カラム | score_c, score_a, ... |
 | 過剰な正規化 | テーブル統合 | 3テーブル → 1テーブル |
@@ -363,3 +320,4 @@ docker-compose up -d
 |------|------|
 | 2025-01-01 | 初版作成 |
 | 2025-01-01 | screened_stocks → canslim_stocks にリネーム |
+| 2025-01-01 | benchmarks テーブル削除（price_cache で代替）|

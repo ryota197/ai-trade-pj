@@ -38,19 +38,6 @@ package "Market Context" {
         + rsiSignal(): Signal
     }
 
-    class "Benchmark" <<aggregate>> {
-        + symbol: string
-        + performance1y: Decimal
-        + performance9m: Decimal
-        + performance6m: Decimal
-        + performance3m: Decimal
-        + performance1m: Decimal
-        + weightedPerformance: Decimal
-        + recordedAt: datetime
-        --
-        + calculateWeightedPerformance(): Decimal
-    }
-
     enum "MarketCondition" <<enum>> {
         RISK_ON
         NEUTRAL
@@ -147,55 +134,6 @@ class MarketSnapshot:
 
 ---
 
-## 集約2: Benchmark
-
-### 定義
-
-市場ベンチマーク（S&P500, NASDAQ100）のパフォーマンスデータ。RS計算に使用。
-
-### 責務
-
-- 期間別パフォーマンスの保持
-- IBD式加重パフォーマンスの計算
-
-### 不変条件
-
-1. symbol は "^GSPC"（S&P500）または "^NDX"（NASDAQ100）
-
-### コード例
-
-```python
-@dataclass
-class Benchmark:
-    """市場ベンチマーク（集約ルート）"""
-
-    symbol: str  # "^GSPC" or "^NDX"
-    performance_1y: Decimal
-    performance_9m: Decimal
-    performance_6m: Decimal
-    performance_3m: Decimal
-    performance_1m: Decimal
-    weighted_performance: Decimal
-    recorded_at: datetime
-
-    @staticmethod
-    def calculate_weighted_performance(
-        perf_3m: Decimal,
-        perf_6m: Decimal,
-        perf_9m: Decimal,
-        perf_12m: Decimal,
-    ) -> Decimal:
-        """IBD式加重パフォーマンス計算"""
-        return (
-            perf_3m * Decimal("0.4") +
-            perf_6m * Decimal("0.2") +
-            perf_9m * Decimal("0.2") +
-            perf_12m * Decimal("0.2")
-        )
-```
-
----
-
 ## ドメインサービス: MarketAnalyzer
 
 Market Context には1つのドメインサービスを定義。
@@ -282,21 +220,6 @@ class MarketSnapshotRepository(ABC):
         pass
 
 
-class BenchmarkRepository(ABC):
-    """ベンチマークリポジトリ"""
-
-    @abstractmethod
-    def find_by_symbol(self, symbol: str) -> Benchmark | None:
-        pass
-
-    @abstractmethod
-    def find_sp500(self) -> Benchmark | None:
-        """S&P500ベンチマークを取得"""
-        return self.find_by_symbol("^GSPC")
-
-    @abstractmethod
-    def save(self, benchmark: Benchmark) -> None:
-        pass
 ```
 
 ---
@@ -309,16 +232,18 @@ class BenchmarkRepository(ABC):
 
 package "Market Context" {
     [MarketSnapshot] as MS
-    [Benchmark] as BM
 }
 
 package "Screener Context" {
     [CANSLIMScorer] as CS
-    [RelativeStrengthCalculator] as RSC
 }
 
 MS --> CS : "M評価に使用\n(MarketCondition)"
-BM --> RSC : "RS計算に使用\n(weightedPerformance)"
+
+note right of CS
+  RS計算は price_cache から
+  S&P500価格履歴を取得して計算
+end note
 
 @enduml
 ```
@@ -326,7 +251,6 @@ BM --> RSC : "RS計算に使用\n(weightedPerformance)"
 | 提供先 | 提供データ | 用途 |
 |-------|-----------|------|
 | CANSLIMScorer | MarketCondition | CAN-SLIM「M」評価 |
-| RelativeStrengthCalculator | Benchmark.weightedPerformance | RS計算の分母 |
 
 ---
 
@@ -355,3 +279,4 @@ Screener が Market に依存する形（Conformist パターン）
 | 日付 | 内容 |
 |------|------|
 | 2025-01-01 | 初版作成 |
+| 2025-01-01 | Benchmark 集約を削除（price_cache で代替）|
