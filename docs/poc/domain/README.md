@@ -14,15 +14,14 @@ docs/poc/domain/
 ├── 00-ubiquitous-language.md    # ユビキタス言語（用語集）
 ├── 01-subdomain-analysis.md     # サブドメイン分析
 ├── 02-context-map.md            # コンテキストマップ
+├── 03-database-design.md        # データベース設計
 ├── screener/                    # Screenerコンテキスト
 │   ├── aggregates.md            # 集約・エンティティ・値オブジェクト
 │   └── domain-services.md       # ドメインサービス
 ├── portfolio/                   # Portfolioコンテキスト
-│   ├── aggregates.md
-│   └── domain-services.md
+│   └── aggregates.md            # 集約設計
 └── market/                      # Marketコンテキスト
-    ├── aggregates.md
-    └── domain-services.md
+    └── aggregates.md            # 集約設計
 ```
 
 ---
@@ -52,11 +51,13 @@ docs/poc/domain/
 
 | ドキュメント | 状態 |
 |-------------|------|
-| ユビキタス言語 | 作成中 |
-| コンテキストマップ | 作成中 |
-| Screener Context | 未着手 |
-| Portfolio Context | 未着手 |
-| Market Context | 未着手 |
+| ユビキタス言語 | 完了 |
+| サブドメイン分析 | 完了 |
+| コンテキストマップ | 完了 |
+| Screener Context | 完了 |
+| Portfolio Context | 完了 |
+| Market Context | 完了 |
+| データベース設計 | 完了 |
 
 ---
 
