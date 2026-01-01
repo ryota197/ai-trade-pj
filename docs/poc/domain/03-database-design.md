@@ -337,28 +337,23 @@ COMMENT ON TABLE benchmarks IS '市場ベンチマーク（S&P500, NASDAQ100）'
 
 ## マイグレーション方針
 
-### Phase 1: 新テーブル作成
-```sql
-CREATE TABLE screened_stocks (...);
-CREATE TABLE benchmarks (...);
+### 方針: クリーンスタート
+
+開発フェーズのため、マイグレーションスクリプトは使用せず、コンテナ再作成で対応。
+
+```bash
+# 既存コンテナとボリュームを削除
+docker-compose down -v
+
+# 新スキーマで再作成
+docker-compose up -d
 ```
 
-### Phase 2: データ移行
-```sql
-INSERT INTO screened_stocks
-SELECT ... FROM stocks s
-JOIN stock_prices p ON s.symbol = p.symbol
-JOIN stock_metrics m ON s.symbol = m.symbol;
-```
+### 作業手順
 
-### Phase 3: 旧テーブル削除
-```sql
-DROP TABLE screener_results;
-DROP TABLE stock_metrics;
-DROP TABLE stock_prices;
-DROP TABLE stocks;
-DROP TABLE market_benchmarks;
-```
+1. `backend/src/infrastructure/database/init.sql` を新スキーマに更新
+2. Docker コンテナを再作成
+3. 動作確認
 
 ---
 
