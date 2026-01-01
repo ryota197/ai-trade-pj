@@ -6,10 +6,10 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =====================================================
--- screened_stocks: スクリーニング対象銘柄（Screener Context）
--- ドメインモデル: ScreenedStock 集約
+-- canslim_stocks: CAN-SLIM分析銘柄（Screener Context）
+-- ドメインモデル: CANSLIMStock 集約
 -- =====================================================
-CREATE TABLE screened_stocks (
+CREATE TABLE canslim_stocks (
     -- 主キー（複合）
     symbol VARCHAR(10) NOT NULL,
     date DATE NOT NULL,
@@ -55,38 +55,38 @@ CREATE TABLE screened_stocks (
     CONSTRAINT valid_canslim CHECK (canslim_score IS NULL OR canslim_score BETWEEN 0 AND 100)
 );
 
-COMMENT ON TABLE screened_stocks IS 'スクリーニング対象銘柄（1集約 = 1テーブル）';
-COMMENT ON COLUMN screened_stocks.symbol IS 'ティッカーシンボル（例: AAPL）';
-COMMENT ON COLUMN screened_stocks.date IS 'スクリーニング日';
-COMMENT ON COLUMN screened_stocks.name IS '企業名';
-COMMENT ON COLUMN screened_stocks.industry IS '業種';
-COMMENT ON COLUMN screened_stocks.price IS '現在株価';
-COMMENT ON COLUMN screened_stocks.change_percent IS '前日比変動率（%）';
-COMMENT ON COLUMN screened_stocks.volume IS '出来高';
-COMMENT ON COLUMN screened_stocks.avg_volume_50d IS '50日平均出来高';
-COMMENT ON COLUMN screened_stocks.market_cap IS '時価総額（USD）';
-COMMENT ON COLUMN screened_stocks.week_52_high IS '52週高値';
-COMMENT ON COLUMN screened_stocks.week_52_low IS '52週安値';
-COMMENT ON COLUMN screened_stocks.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
-COMMENT ON COLUMN screened_stocks.eps_growth_annual IS 'A: 年間EPS成長率（%）';
-COMMENT ON COLUMN screened_stocks.institutional_ownership IS 'I: 機関投資家保有率（%）';
-COMMENT ON COLUMN screened_stocks.relative_strength IS 'S&P500比の相対強度（生値）';
-COMMENT ON COLUMN screened_stocks.rs_rating IS 'L: RS Rating（1-99パーセンタイル）';
-COMMENT ON COLUMN screened_stocks.canslim_score IS 'CAN-SLIMスコア（0-100）';
-COMMENT ON COLUMN screened_stocks.score_c IS 'C: Current Earnings スコア';
-COMMENT ON COLUMN screened_stocks.score_a IS 'A: Annual Earnings スコア';
-COMMENT ON COLUMN screened_stocks.score_n IS 'N: New Product スコア';
-COMMENT ON COLUMN screened_stocks.score_s IS 'S: Supply/Demand スコア';
-COMMENT ON COLUMN screened_stocks.score_l IS 'L: Leader スコア';
-COMMENT ON COLUMN screened_stocks.score_i IS 'I: Institutional スコア';
-COMMENT ON COLUMN screened_stocks.score_m IS 'M: Market スコア';
-COMMENT ON COLUMN screened_stocks.updated_at IS '更新日時';
+COMMENT ON TABLE canslim_stocks IS 'CAN-SLIM分析銘柄（1集約 = 1テーブル）';
+COMMENT ON COLUMN canslim_stocks.symbol IS 'ティッカーシンボル（例: AAPL）';
+COMMENT ON COLUMN canslim_stocks.date IS '記録日';
+COMMENT ON COLUMN canslim_stocks.name IS '企業名';
+COMMENT ON COLUMN canslim_stocks.industry IS '業種';
+COMMENT ON COLUMN canslim_stocks.price IS '現在株価';
+COMMENT ON COLUMN canslim_stocks.change_percent IS '前日比変動率（%）';
+COMMENT ON COLUMN canslim_stocks.volume IS '出来高';
+COMMENT ON COLUMN canslim_stocks.avg_volume_50d IS '50日平均出来高';
+COMMENT ON COLUMN canslim_stocks.market_cap IS '時価総額（USD）';
+COMMENT ON COLUMN canslim_stocks.week_52_high IS '52週高値';
+COMMENT ON COLUMN canslim_stocks.week_52_low IS '52週安値';
+COMMENT ON COLUMN canslim_stocks.eps_growth_quarterly IS 'C: 四半期EPS成長率（%）';
+COMMENT ON COLUMN canslim_stocks.eps_growth_annual IS 'A: 年間EPS成長率（%）';
+COMMENT ON COLUMN canslim_stocks.institutional_ownership IS 'I: 機関投資家保有率（%）';
+COMMENT ON COLUMN canslim_stocks.relative_strength IS 'S&P500比の相対強度（生値）';
+COMMENT ON COLUMN canslim_stocks.rs_rating IS 'L: RS Rating（1-99パーセンタイル）';
+COMMENT ON COLUMN canslim_stocks.canslim_score IS 'CAN-SLIMスコア（0-100）';
+COMMENT ON COLUMN canslim_stocks.score_c IS 'C: Current Earnings スコア';
+COMMENT ON COLUMN canslim_stocks.score_a IS 'A: Annual Earnings スコア';
+COMMENT ON COLUMN canslim_stocks.score_n IS 'N: New Product スコア';
+COMMENT ON COLUMN canslim_stocks.score_s IS 'S: Supply/Demand スコア';
+COMMENT ON COLUMN canslim_stocks.score_l IS 'L: Leader スコア';
+COMMENT ON COLUMN canslim_stocks.score_i IS 'I: Institutional スコア';
+COMMENT ON COLUMN canslim_stocks.score_m IS 'M: Market スコア';
+COMMENT ON COLUMN canslim_stocks.updated_at IS '更新日時';
 
 -- インデックス
-CREATE INDEX idx_screened_stocks_date ON screened_stocks(date);
-CREATE INDEX idx_screened_stocks_rs ON screened_stocks(rs_rating DESC)
+CREATE INDEX idx_canslim_stocks_date ON canslim_stocks(date);
+CREATE INDEX idx_canslim_stocks_rs ON canslim_stocks(rs_rating DESC)
     WHERE rs_rating IS NOT NULL;
-CREATE INDEX idx_screened_stocks_canslim ON screened_stocks(canslim_score DESC)
+CREATE INDEX idx_canslim_stocks_canslim ON canslim_stocks(canslim_score DESC)
     WHERE canslim_score IS NOT NULL;
 
 -- =====================================================

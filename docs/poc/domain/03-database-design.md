@@ -10,7 +10,7 @@
 
 | 原則 | 適用 |
 |------|------|
-| 1集約 = 1テーブル | ScreenedStock, Trade 等 |
+| 1集約 = 1テーブル | CANSLIMStock, Trade 等 |
 | 複合主キー優先 | 不要なサロゲートキーを避ける |
 | FK制約明示 | 参照整合性を保証 |
 | 過剰な正規化を避ける | JOINを減らす |
@@ -25,7 +25,7 @@
 
 skinparam linetype ortho
 
-entity "screened_stocks" as SS {
+entity "canslim_stocks" as CS {
     * symbol : VARCHAR(10) <<PK>>
     * date : DATE <<PK>>
     --
@@ -113,12 +113,12 @@ entity "benchmarks" as BM {
 
 ## テーブル定義
 
-### 1. screened_stocks（Screener Context）
+### 1. canslim_stocks（Screener Context）
 
-**ドメインモデル:** ScreenedStock 集約
+**ドメインモデル:** CANSLIMStock 集約
 
 ```sql
-CREATE TABLE screened_stocks (
+CREATE TABLE canslim_stocks (
     -- 主キー（複合）
     symbol VARCHAR(10) NOT NULL,
     date DATE NOT NULL,
@@ -165,13 +165,13 @@ CREATE TABLE screened_stocks (
 );
 
 -- インデックス
-CREATE INDEX idx_screened_stocks_date ON screened_stocks(date);
-CREATE INDEX idx_screened_stocks_rs ON screened_stocks(rs_rating DESC)
+CREATE INDEX idx_canslim_stocks_date ON canslim_stocks(date);
+CREATE INDEX idx_canslim_stocks_rs ON canslim_stocks(rs_rating DESC)
     WHERE rs_rating IS NOT NULL;
-CREATE INDEX idx_screened_stocks_canslim ON screened_stocks(canslim_score DESC)
+CREATE INDEX idx_canslim_stocks_canslim ON canslim_stocks(canslim_score DESC)
     WHERE canslim_score IS NOT NULL;
 
-COMMENT ON TABLE screened_stocks IS 'スクリーニング対象銘柄（1集約 = 1テーブル）';
+COMMENT ON TABLE canslim_stocks IS 'CAN-SLIM分析銘柄（1集約 = 1テーブル）';
 ```
 
 ---
@@ -310,10 +310,10 @@ COMMENT ON TABLE benchmarks IS '市場ベンチマーク（S&P500, NASDAQ100）'
 
 | 現行 | 新設計 | 変更点 |
 |------|--------|--------|
-| stocks | 廃止 | screened_stocks に統合 |
-| stock_prices | 廃止 | screened_stocks に統合 |
-| stock_metrics | 廃止 | screened_stocks に統合 |
-| screener_results | 廃止 | screened_stocks に置換 |
+| stocks | 廃止 | canslim_stocks に統合 |
+| stock_prices | 廃止 | canslim_stocks に統合 |
+| stock_metrics | 廃止 | canslim_stocks に統合 |
+| screener_results | 廃止 | canslim_stocks に置換 |
 | watchlist | watchlist | 変更なし |
 | paper_trades | trades | リネーム |
 | market_snapshots | market_snapshots | 一部カラム削除 |
@@ -327,11 +327,11 @@ COMMENT ON TABLE benchmarks IS '市場ベンチマーク（S&P500, NASDAQ100）'
 
 | アンチパターン | 対策 | 実装 |
 |---------------|------|------|
-| IDリクワイアド | 複合主キー | screened_stocks, benchmarks |
-| キーレスエントリ | FK制約 | （screened_stocks は単独で完結）|
+| IDリクワイアド | 複合主キー | canslim_stocks, benchmarks |
+| キーレスエントリ | FK制約 | （canslim_stocks は単独で完結）|
 | EAV | 個別カラム | score_c, score_a, ... |
 | 過剰な正規化 | テーブル統合 | 3テーブル → 1テーブル |
-| スパゲッティクエリ | JOINなし | screened_stocks 単独でクエリ完結 |
+| スパゲッティクエリ | JOINなし | canslim_stocks 単独でクエリ完結 |
 
 ---
 
@@ -362,3 +362,4 @@ docker-compose up -d
 | 日付 | 内容 |
 |------|------|
 | 2025-01-01 | 初版作成 |
+| 2025-01-01 | screened_stocks → canslim_stocks にリネーム |
