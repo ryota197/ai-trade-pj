@@ -18,18 +18,16 @@
 | 現行ファイル | 現行クラス | 新設計 | アクション |
 |-------------|-----------|--------|----------|
 | stock_identity.py | StockIdentity | CANSLIMStock に統合 | 削除 |
-| price_snapshot.py | PriceSnapshot | PriceSnapshot (VO) | 維持（内部VO化） |
-| stock_metrics.py | StockMetrics | StockRating (VO) | 置換 |
+| price_snapshot.py | PriceSnapshot | CANSLIMStock に統合 | 削除 |
+| stock_metrics.py | StockMetrics | CANSLIMStock に統合 | 削除 |
 | market_benchmark.py | MarketBenchmark | - | 削除 |
 | market_status.py | MarketStatus | MarketSnapshot | リネーム・簡略化 |
 | watchlist_item.py | WatchlistItem | WatchlistItem | 維持 |
 | paper_trade.py | PaperTrade | Trade | リネーム |
-| canslim_score.py | CANSLIMScore | CANSLIMScore (VO) | 維持 |
+| canslim_score.py | CANSLIMScore | - | 削除（フラット化） |
 | canslim_config.py | CANSLIMWeights 等 | ScreeningCriteria | 置換 |
 | quote.py | Quote, HistoricalPrice | - | 削除（API直接使用） |
-| - | - | CANSLIMStock | 新規作成 |
-| - | - | RSRating (VO) | 新規作成 |
-| - | - | StockRating (VO) | 新規作成 |
+| - | - | CANSLIMStock | 新規作成（フラット構造） |
 
 ### Repositories
 
@@ -65,10 +63,7 @@
 backend/src/domain/
 ├── models/
 │   ├── __init__.py
-│   ├── canslim_stock.py          # 新規: CANSLIMStock 集約ルート
-│   ├── price_snapshot.py         # 維持: PriceSnapshot VO
-│   ├── stock_rating.py           # 新規: StockRating, RSRating VO
-│   ├── canslim_score.py          # 維持: CANSLIMScore VO
+│   ├── canslim_stock.py          # 新規: CANSLIMStock 集約ルート（フラット構造）
 │   ├── screening_criteria.py     # 新規: ScreeningCriteria VO
 │   ├── market_snapshot.py        # リネーム: MarketSnapshot
 │   ├── watchlist_item.py         # 維持
@@ -138,10 +133,9 @@ backend/src/domain/
 
 ### Phase 1: 新モデル作成（破壊的変更なし）
 
-1. `models/canslim_stock.py` 新規作成
-2. `models/stock_rating.py` 新規作成（RSRating, StockRating）
-3. `models/screening_criteria.py` 新規作成
-4. `repositories/canslim_stock_repository.py` 新規作成
+1. `models/canslim_stock.py` 新規作成（フラット構造）
+2. `models/screening_criteria.py` 新規作成
+3. `repositories/canslim_stock_repository.py` 新規作成
 
 ### Phase 2: ドメインサービス更新
 
@@ -172,79 +166,151 @@ backend/src/domain/
 
 ## CANSLIMStock 集約設計
 
+### 設計方針
+
+- **フラット構造**: PriceSnapshot, StockRating などの値オブジェクトを使わず、フラットにフィールドを持つ
+- **NULL許容不変条件**: 段階的計算に対応するため、計算途中のフィールドは NULL を許容
+- **計算フェーズ**: Job 1 → Job 2 → Job 3 の順に段階的に計算・更新
+
+### 計算フェーズと更新順序
+
+```
+Job 1: 価格データ取得
+  → price, change_percent, volume, avg_volume_50d, market_cap,
+    week_52_high, week_52_low, eps_growth_quarterly, eps_growth_annual,
+    institutional_ownership, relative_strength
+
+Job 2: RS Rating 計算（全銘柄の relative_strength が必要）
+  → rs_rating
+
+Job 3: CAN-SLIM スコア計算（rs_rating が必要）
+  → canslim_score, score_c, score_a, score_n, score_s, score_l, score_i, score_m
+```
+
+### コード例
+
 ```python
 # models/canslim_stock.py
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
-from .price_snapshot import PriceSnapshot
-from .stock_rating import StockRating
 from .screening_criteria import ScreeningCriteria
 
 
 @dataclass
 class CANSLIMStock:
-    """CAN-SLIM分析銘柄（集約ルート）"""
+    """CAN-SLIM分析銘柄（集約ルート・フラット構造）"""
 
-    # 識別子
+    # === 識別子（必須） ===
     symbol: str
     date: date
 
-    # 銘柄情報
-    name: str
-    industry: str
+    # === 銘柄情報 ===
+    name: str | None = None
+    industry: str | None = None
 
-    # 価格スナップショット
-    price_snapshot: PriceSnapshot
+    # === 価格データ（Job 1 で更新） ===
+    price: Decimal | None = None
+    change_percent: Decimal | None = None
+    volume: int | None = None
+    avg_volume_50d: int | None = None
+    market_cap: int | None = None
+    week_52_high: Decimal | None = None
+    week_52_low: Decimal | None = None
 
-    # 評価
-    rating: StockRating | None
+    # === 財務データ（Job 1 で更新） ===
+    eps_growth_quarterly: Decimal | None = None
+    eps_growth_annual: Decimal | None = None
+    institutional_ownership: Decimal | None = None
 
-    # メタデータ
-    updated_at: datetime
+    # === 相対強度（Job 1 で更新） ===
+    relative_strength: Decimal | None = None
 
+    # === RS Rating（Job 2 で更新、全銘柄のrelative_strengthが必要） ===
+    rs_rating: int | None = None
+
+    # === CAN-SLIM スコア（Job 3 で更新） ===
+    canslim_score: int | None = None
+    score_c: int | None = None
+    score_a: int | None = None
+    score_n: int | None = None
+    score_s: int | None = None
+    score_l: int | None = None
+    score_i: int | None = None
+    score_m: int | None = None
+
+    # === メタデータ ===
+    updated_at: datetime | None = None
+
+    # === 不変条件（Invariants） ===
+    def __post_init__(self) -> None:
+        if not self.symbol:
+            raise ValueError("symbol is required")
+        if self.rs_rating is not None and not (1 <= self.rs_rating <= 99):
+            raise ValueError("rs_rating must be between 1 and 99")
+        if self.canslim_score is not None and not (0 <= self.canslim_score <= 100):
+            raise ValueError("canslim_score must be between 0 and 100")
+
+    # === ドメインロジック ===
     def meets_filter(self, criteria: ScreeningCriteria) -> bool:
         """スクリーニング条件を満たすか判定"""
-        if self.rating is None:
+        if self.rs_rating is None:
             return False
-        if self.rating.rs_rating is None:
+        if self.rs_rating < criteria.min_rs_rating:
             return False
-        if self.rating.rs_rating.value < criteria.min_rs_rating:
+        if self.canslim_score is None:
             return False
-        if self.rating.canslim_score is None:
-            return False
-        if self.rating.canslim_score.total < criteria.min_canslim_score:
+        if self.canslim_score < criteria.min_canslim_score:
             return False
         return True
 
-    def distance_from_52week_high(self) -> Decimal:
+    def distance_from_52week_high(self) -> Decimal | None:
         """52週高値からの乖離率（%）"""
-        if self.price_snapshot.week_52_high == 0:
+        if self.week_52_high is None or self.price is None:
+            return None
+        if self.week_52_high == 0:
             return Decimal("0")
-        return (
-            (self.price_snapshot.week_52_high - self.price_snapshot.price)
-            / self.price_snapshot.week_52_high
-            * 100
-        )
+        return (self.week_52_high - self.price) / self.week_52_high * 100
 
-    def volume_ratio(self) -> Decimal:
+    def volume_ratio(self) -> Decimal | None:
         """出来高倍率（当日 / 50日平均）"""
-        if self.price_snapshot.avg_volume_50d == 0:
+        if self.volume is None or self.avg_volume_50d is None:
+            return None
+        if self.avg_volume_50d == 0:
             return Decimal("0")
-        return Decimal(self.price_snapshot.volume) / Decimal(self.price_snapshot.avg_volume_50d)
+        return Decimal(self.volume) / Decimal(self.avg_volume_50d)
+
+    def is_leader(self) -> bool:
+        """主導株か（RS Rating 80以上）"""
+        return self.rs_rating is not None and self.rs_rating >= 80
+
+    def is_calculation_complete(self) -> bool:
+        """全計算フェーズが完了しているか"""
+        return (
+            self.relative_strength is not None
+            and self.rs_rating is not None
+            and self.canslim_score is not None
+        )
 ```
 
 ---
 
 ## CANSLIMStockRepository インターフェース
 
+### 設計方針
+
+- **段階的更新対応**: Job 1 → Job 2 → Job 3 の各フェーズで部分更新が可能
+- **一括操作優先**: パフォーマンスのため、一括取得・一括更新メソッドを提供
+- **UPSERT**: 存在すれば更新、なければ挿入
+
 ```python
 # repositories/canslim_stock_repository.py
 
 from abc import ABC, abstractmethod
 from datetime import date
+from decimal import Decimal
 
 from ..models.canslim_stock import CANSLIMStock
 from ..models.screening_criteria import ScreeningCriteria
@@ -252,6 +318,8 @@ from ..models.screening_criteria import ScreeningCriteria
 
 class CANSLIMStockRepository(ABC):
     """CAN-SLIM銘柄リポジトリ"""
+
+    # === 取得系 ===
 
     @abstractmethod
     def find_by_symbol_and_date(
@@ -273,8 +341,22 @@ class CANSLIMStockRepository(ABC):
         limit: int = 20,
         offset: int = 0,
     ) -> list[CANSLIMStock]:
-        """条件でスクリーニング"""
+        """条件でスクリーニング（計算完了銘柄のみ）"""
         pass
+
+    @abstractmethod
+    def find_all_with_relative_strength(
+        self, target_date: date
+    ) -> list[CANSLIMStock]:
+        """relative_strength が計算済みの全銘柄を取得（Job 2 用）"""
+        pass
+
+    @abstractmethod
+    def get_all_symbols(self) -> list[str]:
+        """全シンボル一覧を取得"""
+        pass
+
+    # === 保存系（全フィールド） ===
 
     @abstractmethod
     def save(self, stock: CANSLIMStock) -> None:
@@ -286,9 +368,24 @@ class CANSLIMStockRepository(ABC):
         """一括保存"""
         pass
 
+    # === 部分更新系（段階的計算用） ===
+
     @abstractmethod
-    def get_all_symbols(self) -> list[str]:
-        """全シンボル一覧を取得"""
+    def update_rs_ratings(
+        self,
+        target_date: date,
+        rs_ratings: dict[str, int],  # {symbol: rs_rating}
+    ) -> None:
+        """RS Rating を一括更新（Job 2 用）"""
+        pass
+
+    @abstractmethod
+    def update_canslim_scores(
+        self,
+        target_date: date,
+        scores: dict[str, dict],  # {symbol: {canslim_score, score_c, ...}}
+    ) -> None:
+        """CAN-SLIM スコアを一括更新（Job 3 用）"""
         pass
 ```
 
@@ -320,3 +417,4 @@ class CANSLIMStockRepository(ABC):
 | 日付 | 内容 |
 |------|------|
 | 2025-01-01 | 初版作成 |
+| 2025-01-02 | フラット構造に変更（StockRating 削除）、段階的計算とNULL許容不変条件を追加 |
