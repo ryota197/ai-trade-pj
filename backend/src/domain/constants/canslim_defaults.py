@@ -27,6 +27,10 @@ class CANSLIMDefaults:
     # L - Leader
     # 最小RS Rating（1-99）
     MIN_RS_RATING: int = 80
+    # 主導株判定閾値（RS Rating >= この値で主導株）
+    LEADER_RS_THRESHOLD: int = 80
+    # 出遅れ株判定閾値（RS Rating < この値で出遅れ株）
+    LAGGARD_RS_THRESHOLD: int = 50
 
     # I - Institutional Sponsorship
     # 機関投資家保有率（参考値として表示のみ、フィルターには使用しない）

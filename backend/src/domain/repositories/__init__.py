@@ -1,5 +1,6 @@
 """Domain Repositories"""
 
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
 from src.domain.repositories.benchmark_repository import BenchmarkRepository
 from src.domain.repositories.price_snapshot_repository import PriceSnapshotRepository
 from src.domain.repositories.stock_identity_repository import StockIdentityRepository
@@ -12,6 +13,9 @@ from src.domain.repositories.stock_query_repository import (
 )
 
 __all__ = [
+    # === 新設計（Phase 1） ===
+    "CANSLIMStockRepository",
+    # === 旧設計（Phase 4 で削除予定） ===
     # 単一テーブル リポジトリ
     "StockIdentityRepository",
     "PriceSnapshotRepository",
