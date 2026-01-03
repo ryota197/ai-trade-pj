@@ -46,6 +46,7 @@ from src.infrastructure.repositories.postgres_watchlist_repository import (
 )
 from src.jobs.executions.collect_stock_data import CollectStockDataJob
 from src.jobs.executions.calculate_rs_rating import CalculateRSRatingJob
+from src.jobs.executions.calculate_canslim import CalculateCANSLIMJob
 from src.jobs.flows.refresh_screener import RefreshScreenerFlow
 
 
@@ -258,8 +259,15 @@ def get_refresh_screener_flow(
         stock_repository=stock_repo,
     )
 
+    # Job 3: CAN-SLIMスコア計算
+    canslim_job = CalculateCANSLIMJob(
+        stock_repository=stock_repo,
+        # market_repository は省略（デフォルトでNEUTRAL）
+    )
+
     return RefreshScreenerFlow(
         collect_job=collect_job,
         rs_rating_job=rs_rating_job,
+        canslim_job=canslim_job,
         symbol_provider=symbol_provider,
     )

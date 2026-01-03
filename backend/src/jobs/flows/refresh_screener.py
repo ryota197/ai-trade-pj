@@ -12,6 +12,10 @@ from src.jobs.executions.calculate_rs_rating import (
     CalculateRSRatingInput,
     CalculateRSRatingJob,
 )
+from src.jobs.executions.calculate_canslim import (
+    CalculateCANSLIMInput,
+    CalculateCANSLIMJob,
+)
 
 
 @dataclass
@@ -65,17 +69,19 @@ class RefreshScreenerFlow:
     実行順序:
       1. collect_stock_data    - 外部APIからデータ収集
       2. calculate_rs_rating   - RS Ratingパーセンタイル計算
-      3. calculate_canslim     - CAN-SLIMスコア計算（Phase 3で追加予定）
+      3. calculate_canslim     - CAN-SLIMスコア計算
     """
 
     def __init__(
         self,
         collect_job: CollectStockDataJob,
         rs_rating_job: CalculateRSRatingJob,
+        canslim_job: CalculateCANSLIMJob,
         symbol_provider: "SymbolProvider",
     ) -> None:
         self.collect_job = collect_job
         self.rs_rating_job = rs_rating_job
+        self.canslim_job = canslim_job
         self.symbol_provider = symbol_provider
 
     async def run(self, input_: RefreshScreenerInput) -> FlowResult:
@@ -124,8 +130,23 @@ class RefreshScreenerFlow:
             )
         )
 
-        # TODO: Phase 3 で Job 3 を追加
         # Step 3: CAN-SLIMスコア再計算
+        canslim_result = await self.canslim_job.execute(
+            CalculateCANSLIMInput(target_date=None)  # 当日
+        )
+        steps.append(
+            FlowStepResult(
+                job_name=self.canslim_job.name,
+                success=True,
+                message=f"Updated CAN-SLIM score for {canslim_result.updated_count}/{canslim_result.total_stocks} stocks",
+                data={
+                    "total_stocks": canslim_result.total_stocks,
+                    "updated_count": canslim_result.updated_count,
+                    "market_condition": canslim_result.market_condition.value,
+                    "errors": canslim_result.errors[:10],
+                },
+            )
+        )
 
         completed_at = datetime.now(timezone.utc)
         duration = (completed_at - started_at).total_seconds()
