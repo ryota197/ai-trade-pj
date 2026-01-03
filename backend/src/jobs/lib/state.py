@@ -1,15 +1,15 @@
-"""ジョブ実行コンテキスト"""
+"""ジョブ実行状態"""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 
 @dataclass
-class JobContext:
+class JobState:
     """
-    ジョブ実行コンテキスト
+    ジョブ実行状態
 
-    ジョブ実行中の状態を保持する。
+    ジョブ実行中の進捗状態を保持する。
     """
 
     job_id: str

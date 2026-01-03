@@ -390,5 +390,15 @@ backend/src/
 
 ## 関連ドキュメント
 
+### レイヤー別詳細
+
+- `docs/poc/architectures/layers/domain-layer.md` - Domain層 実装ガイド
+- `docs/poc/architectures/layers/application-layer.md` - Application層 実装ガイド
+- `docs/poc/architectures/layers/infrastructure-layer.md` - Infrastructure層 実装ガイド
+- `docs/poc/architectures/layers/presentation-layer.md` - Presentation層 実装ガイド
+- `docs/poc/architectures/layers/jobs-layer.md` - Jobs層 実装ガイド
+
+### その他
+
 - `docs/poc/plan/refresh-screener-usecase.md` - ジョブ設計詳細
 - `docs/poc/coding-standard/` - コーディング規約
