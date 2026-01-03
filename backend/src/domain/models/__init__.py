@@ -12,7 +12,12 @@ from src.domain.models.market_indicators import (
     SignalType,
     VixIndicator,
 )
-from src.domain.models.market_status import MarketCondition, MarketStatus
+from src.domain.models.market_snapshot import (
+    MarketCondition,
+    MarketSnapshot,
+    Signal,
+)
+from src.domain.models.market_status import MarketStatus
 from src.domain.models.paper_trade import PaperTrade
 from src.domain.models.performance_metrics import PerformanceMetrics
 from src.domain.models.price_snapshot import PriceSnapshot
@@ -20,12 +25,21 @@ from src.domain.models.quote import HistoricalPrice, Quote
 from src.domain.models.screening_criteria import ScreeningCriteria
 from src.domain.models.stock_identity import StockIdentity
 from src.domain.models.stock_metrics import StockMetrics
+from src.domain.models.trade import Trade, TradeStatus, TradeType
 from src.domain.models.watchlist_item import WatchlistItem
 
 __all__ = [
     # === 新設計（Phase 1） ===
     "CANSLIMStock",
     "ScreeningCriteria",
+    # === 新設計（Phase 3） ===
+    "Trade",
+    "TradeType",
+    "TradeStatus",
+    "MarketSnapshot",
+    "MarketCondition",
+    "Signal",
+    "WatchlistItem",
     # === 旧設計（Phase 4 で削除予定） ===
     # 銘柄関連（Entity / Value Object）
     "StockIdentity",
@@ -36,7 +50,6 @@ __all__ = [
     "HistoricalPrice",
     # マーケット関連
     "MarketBenchmark",
-    "MarketCondition",
     "MarketStatus",
     "MarketIndicators",
     "VixIndicator",
@@ -53,6 +66,5 @@ __all__ = [
     # パフォーマンス
     "PerformanceMetrics",
     # ウォッチリスト・ペーパートレード
-    "WatchlistItem",
     "PaperTrade",
 ]
