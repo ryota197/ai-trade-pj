@@ -16,13 +16,6 @@ from src.jobs.executions.calculate_canslim import (
     CalculateCANSLIMOutput,
 )
 
-# NOTE: Job 0 は現在の設計では不要（Job 1 内でベンチマーク取得）
-# from src.jobs.executions.collect_benchmarks import (
-#     CollectBenchmarksInput,
-#     CollectBenchmarksJob,
-#     CollectBenchmarksOutput,
-# )
-
 __all__ = [
     # Job 1: データ収集
     "CollectInput",
