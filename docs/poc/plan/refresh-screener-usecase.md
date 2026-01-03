@@ -642,7 +642,7 @@ backend/src/
 ### 未実装
 
 - [x] admin_controller に GET /status, DELETE 追加
-- [ ] Job 2: RS Rating 一括計算の統合
+- [x] Job 2: RS Rating 一括計算の統合
 - [ ] Job 3: CAN-SLIM スコア一括計算の統合
 - [ ] Frontend 進捗表示（ポーリング）
 

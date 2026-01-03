@@ -6,8 +6,11 @@ from uuid import uuid4
 
 from src.jobs.executions.collect_stock_data import (
     CollectInput,
-    CollectOutput,
     CollectStockDataJob,
+)
+from src.jobs.executions.calculate_rs_rating import (
+    CalculateRSRatingInput,
+    CalculateRSRatingJob,
 )
 
 
@@ -60,21 +63,19 @@ class RefreshScreenerFlow:
     スクリーナーデータ更新フロー
 
     実行順序:
-      1. collect_stock_data   - 外部APIからデータ収集
-      2. recalculate_rs_rating - パーセンタイル計算（Phase 3で追加）
-      3. recalculate_canslim   - CAN-SLIMスコア計算（Phase 3で追加）
-
-    Note:
-        Phase 2ではJob 1のみ実行。
-        Job 2, 3はPhase 3で追加予定。
+      1. collect_stock_data    - 外部APIからデータ収集
+      2. calculate_rs_rating   - RS Ratingパーセンタイル計算
+      3. calculate_canslim     - CAN-SLIMスコア計算（Phase 3で追加予定）
     """
 
     def __init__(
         self,
         collect_job: CollectStockDataJob,
+        rs_rating_job: CalculateRSRatingJob,
         symbol_provider: "SymbolProvider",
     ) -> None:
         self.collect_job = collect_job
+        self.rs_rating_job = rs_rating_job
         self.symbol_provider = symbol_provider
 
     async def run(self, input_: RefreshScreenerInput) -> FlowResult:
@@ -106,8 +107,24 @@ class RefreshScreenerFlow:
             )
         )
 
-        # TODO: Phase 3 で Job 2, 3 を追加
         # Step 2: RS Rating再計算
+        rs_result = await self.rs_rating_job.execute(
+            CalculateRSRatingInput(target_date=None)  # 当日
+        )
+        steps.append(
+            FlowStepResult(
+                job_name=self.rs_rating_job.name,
+                success=True,
+                message=f"Updated RS Rating for {rs_result.updated_count}/{rs_result.total_stocks} stocks",
+                data={
+                    "total_stocks": rs_result.total_stocks,
+                    "updated_count": rs_result.updated_count,
+                    "errors": rs_result.errors[:10],
+                },
+            )
+        )
+
+        # TODO: Phase 3 で Job 3 を追加
         # Step 3: CAN-SLIMスコア再計算
 
         completed_at = datetime.now(timezone.utc)

@@ -45,6 +45,7 @@ from src.infrastructure.repositories.postgres_watchlist_repository import (
     PostgresWatchlistRepository,
 )
 from src.jobs.executions.collect_stock_data import CollectStockDataJob
+from src.jobs.executions.calculate_rs_rating import CalculateRSRatingJob
 from src.jobs.flows.refresh_screener import RefreshScreenerFlow
 
 
@@ -246,12 +247,19 @@ def get_refresh_screener_flow(
     financial_gateway = YFinanceGateway()
     symbol_provider = StaticSymbolProvider()
 
+    # Job 1: データ収集
     collect_job = CollectStockDataJob(
         stock_repository=stock_repo,
         financial_gateway=financial_gateway,
     )
 
+    # Job 2: RS Rating計算
+    rs_rating_job = CalculateRSRatingJob(
+        stock_repository=stock_repo,
+    )
+
     return RefreshScreenerFlow(
         collect_job=collect_job,
+        rs_rating_job=rs_rating_job,
         symbol_provider=symbol_provider,
     )
