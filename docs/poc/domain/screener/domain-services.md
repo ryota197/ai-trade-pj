@@ -19,7 +19,7 @@ skinparam class {
 
 package "Screener Context" {
 
-    class "RelativeStrengthCalculator" <<service>> {
+    class "RSCalculator" <<service>> {
         + calculate(stock: StockPriceHistory, benchmark: BenchmarkHistory): Decimal
         + calculateAll(stocks: list[StockPriceHistory], benchmark: BenchmarkHistory): dict[Symbol, Decimal]
     }
@@ -54,7 +54,7 @@ package "Screener Context" {
 
 ---
 
-## 1. RelativeStrengthCalculator
+## 1. RSCalculator
 
 ### 責務
 
@@ -68,7 +68,7 @@ package "Screener Context" {
 ### インターフェース
 
 ```python
-class RelativeStrengthCalculator:
+class RSCalculator:
     """相対強度計算サービス"""
 
     def calculate(
@@ -384,7 +384,7 @@ start
 :Job 1: 価格・財務データ収集;
 
 |Domain Service|
-:RelativeStrengthCalculator
+:RSCalculator
 相対強度を計算;
 
 :RSRatingCalculator

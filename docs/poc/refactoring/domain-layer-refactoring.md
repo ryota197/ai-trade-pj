@@ -47,7 +47,7 @@
 
 | 現行ファイル | 新設計 | アクション |
 |-------------|--------|----------|
-| relative_strength_calculator.py | RelativeStrengthCalculator | 維持（シグネチャ変更） |
+| rs_calculator.py | RSCalculator | リネーム・シグネチャ変更 |
 | canslim_score_calculator.py | CANSLIMScorer | リネーム |
 | eps_growth_calculator.py | - | 削除（API で取得） |
 | performance_calculator.py | - | 削除または統合 |
@@ -82,7 +82,7 @@ backend/src/domain/
 │
 ├── services/
 │   ├── __init__.py
-│   ├── relative_strength_calculator.py  # 維持
+│   ├── rs_calculator.py                 # リネーム: RSCalculator
 │   ├── rs_rating_calculator.py          # 新規
 │   ├── canslim_scorer.py                # リネーム
 │   ├── market_analyzer.py               # 維持
@@ -142,7 +142,7 @@ backend/src/domain/
 1. `services/rs_rating_calculator.py` 新規作成
 2. `services/canslim_scorer.py` リネーム・更新
 3. `services/screening_service.py` 新規作成
-4. `services/relative_strength_calculator.py` シグネチャ更新
+4. `services/rs_calculator.py` リネーム・シグネチャ更新
 
 ### Phase 3: 既存モデルのリネーム・更新
 
@@ -150,11 +150,14 @@ backend/src/domain/
 2. `models/market_status.py` → `models/market_snapshot.py`
 3. リポジトリのリネーム対応
 
-### Phase 4: 旧ファイル削除
+### Phase 4: 旧ファイル削除・クリーンアップ
 
 1. 統合済みモデル削除
 2. 統合済みリポジトリ削除
 3. 後方互換ディレクトリ削除
+4. ドメインサービスのクリーンアップ
+   - `rs_calculator.py`: 旧メソッド削除（`calculate_relative_strength`, `calculate_from_prices`, `calculate_percentile_rank`, `_estimate_rs_rating`）
+   - `canslim_score_calculator.py`: 削除（`canslim_scorer.py` に移行済み）
 
 ### Phase 5: Infrastructure 層・Application 層更新
 
@@ -418,3 +421,4 @@ class CANSLIMStockRepository(ABC):
 |------|------|
 | 2025-01-01 | 初版作成 |
 | 2025-01-02 | フラット構造に変更（StockRating 削除）、段階的計算とNULL許容不変条件を追加 |
+| 2025-01-03 | Phase 4 にドメインサービスのクリーンアップを追加 |

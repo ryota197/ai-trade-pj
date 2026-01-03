@@ -1,8 +1,9 @@
 """相対強度計算サービス（IBD式）"""
 
 from dataclasses import dataclass
+from decimal import Decimal
 
-from src.domain.constants import TradingDays
+from src.domain.constants import CANSLIMDefaults, TradingDays
 
 
 @dataclass
@@ -12,7 +13,7 @@ class PriceBar:
     close: float
 
 
-class RelativeStrengthCalculator:
+class RSCalculator:
     """
     相対強度（Relative Strength）計算サービス（IBD式）
 
@@ -25,12 +26,6 @@ class RelativeStrengthCalculator:
 
     参考: docs/poc/business-logic/relative-strength.md
     """
-
-    # IBD式の加重定数
-    WEIGHT_3M = 0.40
-    WEIGHT_6M = 0.20
-    WEIGHT_9M = 0.20
-    WEIGHT_12M = 0.20
 
     def calculate_relative_strength(
         self,
@@ -114,10 +109,10 @@ class RelativeStrengthCalculator:
 
         # 加重平均を計算
         weighted = (
-            return_3m * self.WEIGHT_3M
-            + return_6m * self.WEIGHT_6M
-            + return_9m * self.WEIGHT_9M
-            + return_12m * self.WEIGHT_12M
+            return_3m * CANSLIMDefaults.RS_WEIGHT_3M
+            + return_6m * CANSLIMDefaults.RS_WEIGHT_6M
+            + return_9m * CANSLIMDefaults.RS_WEIGHT_9M
+            + return_12m * CANSLIMDefaults.RS_WEIGHT_12M
         )
 
         return weighted
@@ -236,3 +231,57 @@ class RelativeStrengthCalculator:
         # RS 80-120 を Rating 30-70 にマッピング
         rs_rating = int(50 + (relative_strength - 100) * 0.5)
         return max(1, min(99, rs_rating))
+
+    # === 設計書準拠メソッド（Phase 2追加） ===
+
+    def calculate(
+        self,
+        stock_bars: list[PriceBar],
+        benchmark_bars: list[PriceBar],
+    ) -> Decimal | None:
+        """個別銘柄の相対強度を計算
+
+        Args:
+            stock_bars: 銘柄の価格バーリスト（古い順、最低252営業日必要）
+            benchmark_bars: ベンチマークの価格バーリスト（古い順、最低252営業日必要）
+
+        Returns:
+            相対強度（Decimal）。100 = ベンチマークと同等。計算不可の場合は None
+        """
+        stock_weighted = self.calculate_weighted_performance(stock_bars)
+        benchmark_weighted = self.calculate_weighted_performance(benchmark_bars)
+
+        if stock_weighted is None or benchmark_weighted is None:
+            return None
+
+        rs = self.calculate_relative_strength_from_performances(
+            stock_weighted, benchmark_weighted
+        )
+
+        if rs is None:
+            return None
+
+        return Decimal(str(round(rs, 4)))
+
+    def calculate_all(
+        self,
+        stocks: dict[str, list[PriceBar]],
+        benchmark_bars: list[PriceBar],
+    ) -> dict[str, Decimal]:
+        """全銘柄の相対強度を一括計算
+
+        Args:
+            stocks: 銘柄ごとの価格バーリスト {symbol: [PriceBar, ...]}
+            benchmark_bars: ベンチマークの価格バーリスト
+
+        Returns:
+            銘柄ごとの相対強度 {symbol: Decimal}
+        """
+        results: dict[str, Decimal] = {}
+
+        for symbol, stock_bars in stocks.items():
+            rs = self.calculate(stock_bars, benchmark_bars)
+            if rs is not None:
+                results[symbol] = rs
+
+        return results

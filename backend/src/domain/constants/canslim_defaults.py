@@ -46,3 +46,9 @@ class CANSLIMDefaults:
     DEFAULT_LIMIT: int = 20
     MAX_LIMIT: int = 100
     DEFAULT_OFFSET: int = 0
+
+    # RS計算 IBD式加重（合計100%）
+    RS_WEIGHT_3M: float = 0.40  # 3ヶ月: 40%
+    RS_WEIGHT_6M: float = 0.20  # 6ヶ月: 20%
+    RS_WEIGHT_9M: float = 0.20  # 9ヶ月: 20%
+    RS_WEIGHT_12M: float = 0.20  # 12ヶ月: 20%
