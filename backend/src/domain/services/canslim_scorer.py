@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from src.domain.constants import CANSLIMDefaults
 from src.domain.models.canslim_stock import CANSLIMStock
-from src.domain.models.market_status import MarketCondition
+from src.domain.models.market_snapshot import MarketCondition
 
 
 @dataclass(frozen=True)
