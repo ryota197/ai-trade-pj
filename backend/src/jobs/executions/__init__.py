@@ -5,12 +5,13 @@ from src.jobs.executions.collect_stock_data import (
     CollectOutput,
     CollectStockDataJob,
 )
+from src.jobs.executions.calculate_rs_rating import (
+    CalculateRSRatingInput,
+    CalculateRSRatingJob,
+    CalculateRSRatingOutput,
+)
 
-# TODO: Job 2, 3 を新しいドメインモデルに合わせて修正後にインポートを有効化
-# from src.jobs.executions.calculate_rs_rating import (
-#     CalculateRSRatingJob,
-#     CalculateRSRatingOutput,
-# )
+# TODO: Job 3 を新しいドメインモデルに合わせて修正後にインポートを有効化
 # from src.jobs.executions.calculate_canslim import (
 #     CalculateCANSLIMJob,
 #     CalculateCANSLIMOutput,
@@ -28,9 +29,11 @@ __all__ = [
     "CollectInput",
     "CollectOutput",
     "CollectStockDataJob",
-    # TODO: Job 2, 3 修正後に追加
-    # "CalculateRSRatingOutput",
-    # "CalculateRSRatingJob",
+    # Job 2: RS Rating 計算
+    "CalculateRSRatingInput",
+    "CalculateRSRatingOutput",
+    "CalculateRSRatingJob",
+    # TODO: Job 3 修正後に追加
     # "CalculateCANSLIMOutput",
     # "CalculateCANSLIMJob",
 ]

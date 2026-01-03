@@ -1,10 +1,19 @@
 """RS Rating 計算ジョブ (Job 2)"""
 
 from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
 
-from src.domain.repositories import StockMetricsRepository
-from src.domain.services import RelativeStrengthCalculator
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
+from src.domain.services.rs_rating_calculator import RSRatingCalculator
 from src.jobs.lib.base import Job
+
+
+@dataclass
+class CalculateRSRatingInput:
+    """RS Rating 計算入力"""
+
+    target_date: date | None = None  # None の場合は当日
 
 
 @dataclass
@@ -16,7 +25,7 @@ class CalculateRSRatingOutput:
     errors: list[dict] = field(default_factory=list)
 
 
-class CalculateRSRatingJob(Job[None, CalculateRSRatingOutput]):
+class CalculateRSRatingJob(Job[CalculateRSRatingInput, CalculateRSRatingOutput]):
     """
     RS Rating 計算ジョブ (Job 2)
 
@@ -25,8 +34,8 @@ class CalculateRSRatingJob(Job[None, CalculateRSRatingOutput]):
 
     責務:
         - DB内の全銘柄の最新 relative_strength を取得
-        - パーセンタイル計算（RelativeStrengthCalculator に委譲）
-        - stock_metrics.rs_rating を一括更新
+        - パーセンタイル計算（RSRatingCalculator に委譲）
+        - canslim_stocks.rs_rating を一括更新
 
     注意:
         - 外部API呼び出しなし
@@ -38,47 +47,46 @@ class CalculateRSRatingJob(Job[None, CalculateRSRatingOutput]):
 
     def __init__(
         self,
-        stock_metrics_repository: StockMetricsRepository,
-        rs_calculator: RelativeStrengthCalculator | None = None,
+        stock_repository: CANSLIMStockRepository,
+        rs_rating_calculator: RSRatingCalculator | None = None,
     ) -> None:
-        self._metrics_repo = stock_metrics_repository
-        self._rs_calculator = rs_calculator or RelativeStrengthCalculator()
+        self._stock_repo = stock_repository
+        self._calculator = rs_rating_calculator or RSRatingCalculator()
 
-    async def execute(self, _: None = None) -> CalculateRSRatingOutput:
+    async def execute(
+        self, input_: CalculateRSRatingInput | None = None
+    ) -> CalculateRSRatingOutput:
         """ジョブ実行"""
-        errors: list[dict] = []
+        # 対象日を決定
+        target_date = input_.target_date if input_ else None
+        if target_date is None:
+            target_date = date.today()
 
-        # 1. 全銘柄の最新 relative_strength を取得
-        stocks_with_rs = await self._metrics_repo.get_all_latest_relative_strength()
+        # 1. relative_strength 計算済みの全銘柄を取得
+        stocks = self._stock_repo.find_all_with_relative_strength(target_date)
 
-        if not stocks_with_rs:
+        if not stocks:
             return CalculateRSRatingOutput(
                 total_stocks=0,
                 updated_count=0,
                 errors=[{"error": "No stocks with relative_strength found"}],
             )
 
-        # 2. 全銘柄の relative_strength リストを作成
-        all_relative_strengths = [rs for _, rs in stocks_with_rs]
+        # 2. relative_strength を辞書に変換
+        relative_strengths: dict[str, Decimal] = {
+            stock.symbol: stock.relative_strength
+            for stock in stocks
+            if stock.relative_strength is not None
+        }
 
-        # 3. 各銘柄の rs_rating を計算
-        updates: list[tuple[str, int]] = []
-        for symbol, relative_strength in stocks_with_rs:
-            try:
-                rs_rating = self._rs_calculator.calculate_percentile_rank(
-                    relative_strength, all_relative_strengths
-                )
-                updates.append((symbol, rs_rating))
-            except Exception as e:
-                errors.append({"symbol": symbol, "error": str(e)})
+        # 3. RSRatingCalculator で RS Rating を計算
+        rs_ratings = self._calculator.calculate_ratings(relative_strengths)
 
         # 4. 一括更新
-        updated_count = 0
-        if updates:
-            updated_count = await self._metrics_repo.bulk_update_rs_rating(updates)
+        self._stock_repo.update_rs_ratings(target_date, rs_ratings)
 
         return CalculateRSRatingOutput(
-            total_stocks=len(stocks_with_rs),
-            updated_count=updated_count,
-            errors=errors,
+            total_stocks=len(stocks),
+            updated_count=len(rs_ratings),
+            errors=[],
         )
