@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Header } from "@/components/layout";
-import {
-  WatchlistTable,
-  AddToWatchlistButton,
-  TradeHistory,
-  TradeForm,
-  PerformanceSummary,
-} from "@/components/portfolio";
-import { useWatchlist } from "@/hooks/useWatchlist";
-import { useTrades } from "@/hooks/useTrades";
-import { usePerformance } from "@/hooks/usePerformance";
+import { Header } from "@/components/layout/Header";
+
+import { WatchlistTable } from "./_components/WatchlistTable";
+import { AddToWatchlistButton } from "./_components/AddToWatchlistButton";
+import { TradeHistory } from "./_components/TradeHistory";
+import { TradeForm } from "./_components/TradeForm";
+import { PerformanceSummary } from "./_components/PerformanceSummary";
+import { useWatchlist } from "./_hooks/useWatchlist";
+import { useTrades } from "./_hooks/useTrades";
+import { usePerformance } from "./_hooks/usePerformance";
 
 type TabType = "watchlist" | "trades" | "performance";
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from src.domain.entities.watchlist_item import WatchlistItem, WatchlistStatus
+from src.domain.models.watchlist_item import WatchlistItem, WatchlistStatus
 from src.domain.repositories.watchlist_repository import WatchlistRepository
 from src.infrastructure.database.models.watchlist_model import WatchlistModel
 

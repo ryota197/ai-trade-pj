@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 
 # ============================================================
@@ -52,10 +53,7 @@ class OpenTradeInput:
     symbol: str
     trade_type: str  # buy, sell
     quantity: int
-    entry_price: float
-    stop_loss_price: float | None = None
-    target_price: float | None = None
-    notes: str | None = None
+    entry_price: Decimal
 
 
 @dataclass(frozen=True)
@@ -63,29 +61,7 @@ class CloseTradeInput:
     """トレード決済 入力DTO"""
 
     trade_id: int
-    exit_price: float
-    exit_date: datetime | None = None
-
-
-@dataclass(frozen=True)
-class TradeFilterInput:
-    """トレード取得 入力DTO"""
-
-    status: str | None = None  # open, closed, cancelled
-    trade_type: str | None = None  # buy, sell
-    symbol: str | None = None
-    start_date: datetime | None = None
-    end_date: datetime | None = None
-    limit: int = 100
-    offset: int = 0
-
-
-@dataclass(frozen=True)
-class PerformanceInput:
-    """パフォーマンス取得 入力DTO"""
-
-    start_date: datetime | None = None
-    end_date: datetime | None = None
+    exit_price: Decimal
 
 
 # ============================================================
@@ -129,25 +105,17 @@ class WatchlistOutput:
 class TradeOutput:
     """トレード 出力DTO"""
 
-    id: int
     symbol: str
     trade_type: str
     quantity: int
-    entry_price: float
-    entry_date: datetime
-    exit_price: float | None
-    exit_date: datetime | None
-    stop_loss_price: float | None
-    target_price: float | None
+    entry_price: Decimal
     status: str
-    notes: str | None
-    created_at: datetime
-    # 計算フィールド
-    position_value: float
-    profit_loss: float | None
-    return_percent: float | None
-    holding_days: int | None
-    is_winner: bool | None
+    traded_at: datetime
+    id: int | None = None  # 新規作成直後はNone（DBから再取得後に設定される）
+    exit_price: Decimal | None = None
+    closed_at: datetime | None = None
+    profit_loss: Decimal | None = None
+    profit_loss_percent: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -164,20 +132,16 @@ class TradeListOutput:
 class OpenPositionOutput:
     """オープンポジション 出力DTO"""
 
-    id: int
     symbol: str
     trade_type: str
     quantity: int
-    entry_price: float
-    entry_date: datetime
-    stop_loss_price: float | None
-    target_price: float | None
-    position_value: float
-    holding_days: int
+    entry_price: Decimal
+    traded_at: datetime
+    id: int | None = None
     # 含み損益（現在価格が必要なので別途計算）
-    current_price: float | None = None
-    unrealized_pnl: float | None = None
-    unrealized_return_percent: float | None = None
+    current_price: Decimal | None = None
+    unrealized_pnl: Decimal | None = None
+    unrealized_pnl_percent: Decimal | None = None
 
 
 # ============================================================
@@ -214,32 +178,3 @@ class PerformanceOutput:
     is_profitable: bool
     has_sufficient_trades: bool
     calculated_at: datetime
-
-
-@dataclass(frozen=True)
-class MonthlyReturnOutput:
-    """月別リターン 出力DTO"""
-
-    month: str  # "YYYY-MM"
-    return_percent: float
-    trade_count: int
-
-
-@dataclass(frozen=True)
-class SymbolStatsOutput:
-    """シンボル別統計 出力DTO"""
-
-    symbol: str
-    total_trades: int
-    winning_trades: int
-    total_profit_loss: float
-    win_rate: float
-
-
-@dataclass(frozen=True)
-class DetailedPerformanceOutput:
-    """詳細パフォーマンス 出力DTO"""
-
-    summary: PerformanceOutput
-    monthly_returns: list[MonthlyReturnOutput]
-    symbol_stats: list[SymbolStatsOutput]

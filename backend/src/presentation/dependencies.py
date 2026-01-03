@@ -3,6 +3,9 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from src.application.use_cases.admin.refresh_screener_data import (
+    RefreshScreenerDataUseCase,
+)
 from src.application.use_cases.market import (
     GetMarketIndicatorsUseCase,
     GetMarketStatusUseCase,
@@ -19,14 +22,21 @@ from src.application.use_cases.screener.screen_canslim_stocks import (
 )
 from src.domain.services.market_analyzer import MarketAnalyzer
 from src.domain.services.performance_calculator import PerformanceCalculator
-from src.domain.services.rs_rating_calculator import RSRatingCalculator
+from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
 from src.infrastructure.database.connection import get_db
+from src.infrastructure.external.symbol_provider import StaticSymbolProvider
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
 from src.infrastructure.gateways.yfinance_market_data_gateway import (
     YFinanceMarketDataGateway,
 )
+from src.infrastructure.repositories.postgres_refresh_job_repository import (
+    PostgresRefreshJobRepository,
+)
 from src.infrastructure.repositories.postgres_screener_repository import (
     PostgresScreenerRepository,
+)
+from src.infrastructure.repositories.postgres_stock_repository import (
+    PostgresStockRepository,
 )
 from src.infrastructure.repositories.postgres_trade_repository import (
     PostgresTradeRepository,
@@ -34,6 +44,8 @@ from src.infrastructure.repositories.postgres_trade_repository import (
 from src.infrastructure.repositories.postgres_watchlist_repository import (
     PostgresWatchlistRepository,
 )
+from src.jobs.executions.collect_stock_data import CollectStockDataJob
+from src.jobs.flows.refresh_screener import RefreshScreenerFlow
 
 
 def get_market_status_use_case() -> GetMarketStatusUseCase:
@@ -78,7 +90,7 @@ def get_screen_canslim_use_case(
     """
     stock_repo = PostgresScreenerRepository(db)
     financial_gateway = YFinanceGateway()
-    rs_calculator = RSRatingCalculator()
+    rs_calculator = RelativeStrengthCalculator()
 
     return ScreenCANSLIMStocksUseCase(
         stock_repository=stock_repo,
@@ -182,4 +194,64 @@ def get_performance_use_case(
     return GetPerformanceUseCase(
         trade_repository=trade_repo,
         performance_calculator=performance_calculator,
+    )
+
+
+# ============================================================
+# Admin Use Cases
+# ============================================================
+
+
+def get_refresh_screener_use_case(
+    db: Session = Depends(get_db),
+) -> RefreshScreenerDataUseCase:
+    """
+    RefreshScreenerDataUseCaseの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        RefreshScreenerDataUseCase: スクリーニングデータ更新ユースケース
+
+    Deprecated:
+        Phase 2以降は get_refresh_screener_flow を使用してください。
+    """
+    job_repo = PostgresRefreshJobRepository(db)
+    stock_repo = PostgresScreenerRepository(db)
+    financial_gateway = YFinanceGateway()
+    rs_calculator = RelativeStrengthCalculator()
+
+    return RefreshScreenerDataUseCase(
+        job_repository=job_repo,
+        stock_repository=stock_repo,
+        financial_gateway=financial_gateway,
+        rs_calculator=rs_calculator,
+    )
+
+
+def get_refresh_screener_flow(
+    db: Session = Depends(get_db),
+) -> RefreshScreenerFlow:
+    """
+    RefreshScreenerFlowの依存性を解決
+
+    Args:
+        db: データベースセッション
+
+    Returns:
+        RefreshScreenerFlow: スクリーナーデータ更新フロー
+    """
+    stock_repo = PostgresStockRepository(db)
+    financial_gateway = YFinanceGateway()
+    symbol_provider = StaticSymbolProvider()
+
+    collect_job = CollectStockDataJob(
+        stock_repository=stock_repo,
+        financial_gateway=financial_gateway,
+    )
+
+    return RefreshScreenerFlow(
+        collect_job=collect_job,
+        symbol_provider=symbol_provider,
     )

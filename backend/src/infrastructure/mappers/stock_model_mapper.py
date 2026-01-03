@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 from src.domain.entities.stock import Stock
-from src.domain.value_objects.canslim_score import CANSLIMScore
+from src.domain.models import CANSLIMScore
 from src.infrastructure.database.models.screener_result_model import ScreenerResultModel
 
 

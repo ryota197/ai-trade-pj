@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from src.application.use_cases.data.get_financial_metrics import (
     GetFinancialMetricsUseCase,
 )
-from src.domain.entities.quote import HistoricalPrice, Quote
+from src.domain.models import HistoricalPrice, Quote
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
 from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.quote import (

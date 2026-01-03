@@ -5,9 +5,11 @@ import Link from "next/link";
 import { ArrowLeft, RefreshCw, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PriceChart } from "@/components/charts/PriceChart";
-import { FundamentalsCard, CANSLIMScoreCard } from "@/components/stock";
-import { useStockData } from "@/hooks/useStockData";
+
+import { PriceChart } from "./_components/PriceChart";
+import { FundamentalsCard } from "./_components/FundamentalsCard";
+import { CANSLIMScoreCard } from "./_components/CANSLIMScoreCard";
+import { useStockData } from "./_hooks/useStockData";
 
 interface StockDetailPageProps {
   params: Promise<{ symbol: string }>;

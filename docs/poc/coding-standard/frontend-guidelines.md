@@ -6,32 +6,170 @@ Next.js 16 + TypeScript + TailwindCSS + shadcn/ui を使用したフロントエ
 
 ---
 
-## プロジェクト構成
+## ディレクトリ構成
 
-### ディレクトリ構成
+### 全体構成
 
 ```
-src/
-├── app/              # App Router（ページ）
-├── components/       # コンポーネント
-│   ├── ui/           # shadcn/ui コンポーネント（自動生成）
-│   ├── layout/       # レイアウトコンポーネント
-│   └── {feature}/    # 機能別コンポーネント
-├── hooks/            # カスタムフック
-├── lib/              # ユーティリティ
-│   └── utils.ts      # cn() など共通関数
-└── types/            # 型定義
+frontend/src/
+├── app/                          # App Router（ページ & BFF）
+│   ├── layout.tsx
+│   ├── globals.css
+│   │
+│   ├── (dashboard)/              # ダッシュボード（ルートグループ）
+│   │   ├── page.tsx
+│   │   ├── _components/          # ページ専用コンポーネント
+│   │   └── _hooks/               # ページ専用フック
+│   │
+│   ├── screener/
+│   │   ├── page.tsx
+│   │   ├── _components/
+│   │   └── _hooks/
+│   │
+│   ├── stock/[symbol]/
+│   │   ├── page.tsx
+│   │   ├── _components/
+│   │   └── _hooks/
+│   │
+│   ├── portfolio/
+│   │   ├── page.tsx
+│   │   ├── _components/
+│   │   └── _hooks/
+│   │
+│   ├── admin/screener/
+│   │   ├── page.tsx
+│   │   ├── _components/
+│   │   └── _hooks/
+│   │
+│   └── api/                      # BFF Route Handlers
+│       └── ...
+│
+├── components/                   # 共通コンポーネントのみ
+│   ├── layout/
+│   │   └── Header.tsx
+│   ├── charts/
+│   │   └── PriceChart.tsx
+│   └── ui/                       # shadcn/ui
+│       ├── button.tsx
+│       ├── card.tsx
+│       └── ...
+│
+├── lib/                          # 共通ユーティリティ
+│   ├── backend-fetch.ts
+│   └── utils.ts
+│
+└── types/                        # 共通型定義
+    ├── api.ts
+    ├── market.ts
+    ├── stock.ts
+    └── portfolio.ts
 ```
+
+### ディレクトリ命名規則
+
+| ディレクトリ | プレフィックス | 説明 |
+|-------------|---------------|------|
+| `_components/` | `_` | ページ専用コンポーネント。Next.js がルーティングから除外 |
+| `_hooks/` | `_` | ページ専用フック |
+| `_lib/` | `_` | ページ専用ユーティリティ（必要な場合のみ） |
+| `(groupName)/` | `()` | ルートグループ。URLに影響しない |
 
 ### ファイル命名規則
 
 | 種別 | 命名規則 | 例 |
 |-----|---------|-----|
-| コンポーネント | PascalCase | `StockCard.tsx` |
-| フック | camelCase（use prefix） | `useStockData.ts` |
+| コンポーネント | PascalCase | `StockTable.tsx` |
+| フック | camelCase（use prefix） | `useScreener.ts` |
 | ユーティリティ | camelCase | `formatPrice.ts` |
 | 型定義 | camelCase | `market.ts` |
 | ページ | `page.tsx`（固定） | `app/screener/page.tsx` |
+
+---
+
+## コンポーネント配置ルール
+
+### ページ専用 vs 共通
+
+| 配置場所 | 条件 | 例 |
+|---------|------|-----|
+| `app/{page}/_components/` | そのページでのみ使用 | StockTable, FilterPanel |
+| `components/` | 2つ以上のページで使用 | Header, PriceChart |
+| `components/ui/` | shadcn/ui（汎用UI部品） | Button, Card, Badge |
+
+### barrel file (index.ts) は使用しない
+
+```
+# Bad: index.ts を使った re-export
+app/screener/_components/
+├── StockTable.tsx
+├── FilterPanel.tsx
+└── index.ts          # ← 作成しない
+
+# Good: 個別にインポート
+app/screener/_components/
+├── StockTable.tsx
+└── FilterPanel.tsx
+```
+
+---
+
+## インポートルール
+
+### ページ専用コンポーネント・フック
+
+**相対パスでインポート**
+
+```typescript
+// app/screener/page.tsx
+
+// Good: 相対パス
+import { StockTable } from "./_components/StockTable";
+import { FilterPanel } from "./_components/FilterPanel";
+import { useScreener } from "./_hooks/useScreener";
+
+// Bad: エイリアスパス（ページ専用には使わない）
+import { StockTable } from "@/app/screener/_components/StockTable";
+```
+
+### 共通コンポーネント・ユーティリティ
+
+**エイリアスパス (`@/`) でインポート**
+
+```typescript
+// app/screener/page.tsx
+
+// Good: エイリアスパス
+import { Header } from "@/components/layout/Header";
+import { Button } from "@/components/ui/button";
+import { PriceChart } from "@/components/charts/PriceChart";
+import type { Stock } from "@/types/stock";
+
+// Bad: 相対パス（共通には使わない）
+import { Header } from "../../components/layout/Header";
+```
+
+### インポート順序
+
+```typescript
+// 1. React/Next.js
+import { useState, useCallback } from "react";
+import Link from "next/link";
+
+// 2. 外部ライブラリ
+import { RefreshCw, AlertCircle } from "lucide-react";
+
+// 3. 共通コンポーネント（@/ エイリアス）
+import { Header } from "@/components/layout/Header";
+import { Button } from "@/components/ui/button";
+
+// 4. 共通ユーティリティ・型（@/ エイリアス）
+import { cn } from "@/lib/utils";
+import type { Stock } from "@/types/stock";
+
+// 5. ページ専用（相対パス）
+import { StockTable } from "./_components/StockTable";
+import { useScreener } from "./_hooks/useScreener";
+```
 
 ---
 
@@ -59,98 +197,71 @@ const data: any = fetchData(); // 禁止
 
 ```typescript
 // Good: interface で Props を定義
-interface StockCardProps {
-  stock: Stock;
+interface StockTableProps {
+  stocks: Stock[];
+  isLoading?: boolean;
   onSelect?: (symbol: string) => void;
 }
 
-export function StockCard({ stock, onSelect }: StockCardProps) {
+export function StockTable({ stocks, isLoading, onSelect }: StockTableProps) {
   // ...
 }
 ```
 
-### 型のエクスポート
+### 型定義の配置
 
-```typescript
-// types/market.ts
-export interface MarketStatus {
-  status: 'risk_on' | 'risk_off' | 'neutral';
-  confidence: number;
-  indicators: MarketIndicators;
-}
-
-// types/index.ts（re-export）
-export * from './market';
-export * from './stock';
-```
+| 配置場所 | 条件 |
+|---------|------|
+| `types/` | 複数ページで共有する型（API レスポンス等） |
+| コンポーネントファイル内 | そのコンポーネントでのみ使用する Props 型 |
+| `_hooks/` 内 | そのフックでのみ使用する型 |
 
 ---
 
 ## React / Next.js
 
-### コンポーネント
-
-#### Server Components（デフォルト）
+### Client Components
 
 ```typescript
-// app/screener/page.tsx
-// Server Component（デフォルト）
-export default async function ScreenerPage() {
-  const stocks = await fetchStocks();
+// app/screener/_components/FilterPanel.tsx
+"use client";
 
-  return (
-    <div>
-      <h1>Screener</h1>
-      <StockTable stocks={stocks} />
-    </div>
-  );
+import { useState } from "react";
+
+interface FilterPanelProps {
+  onFilterChange: (filter: ScreenerFilter) => void;
 }
-```
 
-#### Client Components（必要な場合のみ）
-
-```typescript
-// components/screener/FilterPanel.tsx
-'use client';
-
-import { useState } from 'react';
-
-export function FilterPanel() {
+export function FilterPanel({ onFilterChange }: FilterPanelProps) {
   const [minRsRating, setMinRsRating] = useState(80);
-
-  return (
-    // インタラクティブなUI
-  );
+  // ...
 }
 ```
 
-### フック
+### カスタムフック
 
 ```typescript
-// hooks/useStockData.ts
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+// app/screener/_hooks/useScreener.ts
+"use client";
 
-export function useStockData(symbol: string) {
-  return useQuery({
-    queryKey: ['stock', symbol],
-    queryFn: () => api.getStock(symbol),
-    staleTime: 60 * 1000, // 1分
-  });
+import { useState, useCallback, useEffect } from "react";
+
+export function useScreener() {
+  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchStocks = useCallback(async () => {
+    setIsLoading(true);
+    // ...
+  }, []);
+
+  useEffect(() => {
+    fetchStocks();
+  }, [fetchStocks]);
+
+  return { stocks, isLoading, error, refetch: fetchStocks };
 }
-```
-
-### 状態管理
-
-```typescript
-// サーバー状態: TanStack Query
-const { data, isLoading } = useStockData('AAPL');
-
-// クライアント状態: useState
-const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-
-// フォーム状態: useState or React Hook Form
-const [filters, setFilters] = useState<ScreenerFilters>(defaultFilters);
 ```
 
 ---
@@ -161,19 +272,17 @@ const [filters, setFilters] = useState<ScreenerFilters>(defaultFilters);
 
 ```tsx
 // Good: クラス直書き
-<div className="flex items-center gap-4 p-4 bg-white rounded-lg shadow">
-  <span className="text-lg font-bold text-gray-900">{stock.symbol}</span>
+<div className="flex items-center gap-4 p-4 bg-card rounded-lg border">
+  <span className="text-lg font-bold text-foreground">{stock.symbol}</span>
 </div>
 
-// Bad: @apply の多用（避ける）
-// styles.css
-// .stock-card { @apply flex items-center gap-4 p-4 bg-white rounded-lg shadow; }
+// Bad: @apply の多用
 ```
 
 ### 条件付きスタイル
 
 ```tsx
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
 
 // Good: cn() ユーティリティを使用
 <span className={cn(
@@ -184,154 +293,67 @@ import { cn } from '@/lib/utils';
 </span>
 ```
 
-### レスポンシブ
-
-```tsx
-// モバイルファースト
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-  {/* ... */}
-</div>
-```
-
 ---
 
 ## shadcn/ui
 
-### 概要
-
-- **コピー&ペースト方式** のコンポーネントライブラリ
-- コンポーネントは `components/ui/` に配置される
-- Radix UI + TailwindCSS ベースで、カスタマイズ性が高い
-
 ### コンポーネントの追加
 
 ```bash
-# 必要なコンポーネントのみ追加
-npx shadcn@latest add card
-npx shadcn@latest add button badge
-npx shadcn@latest add table dialog
+npx shadcn@latest add card button badge
 ```
 
-### コンポーネントの階層
-
-```
-components/
-├── ui/                    # shadcn/ui（自動生成、基本的に編集しない）
-│   ├── card.tsx
-│   ├── button.tsx
-│   └── badge.tsx
-├── layout/                # レイアウト（カスタム）
-│   └── Header.tsx
-└── market/                # 機能別（カスタム、ui/を組み合わせる）
-    ├── MarketStatus.tsx   # Card + Badge を使用
-    └── IndicatorCard.tsx  # Card を拡張
-```
-
-### 使用例
+### 使用方法
 
 ```tsx
-// components/market/MarketStatus.tsx
+// 共通コンポーネントからインポート
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-
-interface MarketStatusProps {
-  status: "risk_on" | "risk_off" | "neutral";
-  confidence: number;
-}
-
-export function MarketStatus({ status, confidence }: MarketStatusProps) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Market Status</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Badge variant={status === "risk_on" ? "default" : "destructive"}>
-          {status.toUpperCase()}
-        </Badge>
-        <p>Confidence: {(confidence * 100).toFixed(0)}%</p>
-      </CardContent>
-    </Card>
-  );
-}
+import { Button } from "@/components/ui/button";
 ```
 
 ### カスタマイズ方針
 
 | 種類 | 方針 |
 |------|------|
-| `ui/` 内のファイル | 基本的に編集しない（再生成時に上書きされる可能性） |
+| `ui/` 内のファイル | 基本的に編集しない |
 | スタイル調整 | `globals.css` の CSS変数で調整 |
-| 機能拡張 | 新しいコンポーネントを `ui/` 外に作成し、`ui/` を組み合わせる |
-
-### テーマ設定
-
-```css
-/* globals.css */
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    /* ... */
-  }
-
-  .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    /* ... */
-  }
-}
-```
+| 機能拡張 | 新しいコンポーネントを作成し `ui/` を組み合わせる |
 
 ---
 
-## API通信
+## BFF (Backend For Frontend)
 
-### APIクライアント
+### Route Handler の配置
 
-```typescript
-// lib/api.ts
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-
-interface ApiResponse<T> {
-  success: boolean;
-  data: T | null;
-  error: { code: string; message: string } | null;
-}
-
-async function fetchApi<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${endpoint}`);
-  const json: ApiResponse<T> = await res.json();
-
-  if (!json.success) {
-    throw new Error(json.error?.message || 'API Error');
-  }
-
-  return json.data as T;
-}
-
-export const api = {
-  getMarketStatus: () => fetchApi<MarketStatus>('/market/status'),
-  getStocks: (params?: ScreenerParams) =>
-    fetchApi<ScreenerResult>(`/screener/canslim?${new URLSearchParams(params)}`),
-  getStock: (symbol: string) => fetchApi<Stock>(`/data/quote/${symbol}`),
-};
+```
+app/api/
+├── market/
+│   ├── status/route.ts
+│   └── indicators/route.ts
+├── screener/
+│   ├── canslim/route.ts
+│   └── stock/[symbol]/route.ts
+├── watchlist/
+│   ├── route.ts
+│   └── [symbol]/route.ts
+└── admin/
+    └── screener/
+        └── refresh/
+            ├── route.ts
+            └── [jobId]/route.ts
 ```
 
-### TanStack Query の使用
+### backend-fetch の使用
 
 ```typescript
-// hooks/useMarketStatus.ts
-export function useMarketStatus() {
-  return useQuery({
-    queryKey: ['market', 'status'],
-    queryFn: api.getMarketStatus,
-    refetchInterval: 60 * 1000, // 1分ごとに更新
-  });
+// app/api/screener/canslim/route.ts
+import { backendGet } from "@/lib/backend-fetch";
+
+export async function GET() {
+  const result = await backendGet<ApiResponse<ScreenerResult>>(
+    "/screener/canslim"
+  );
+  // ...
 }
 ```
 
@@ -343,15 +365,28 @@ export function useMarketStatus() {
 
 ```tsx
 export function StockList() {
-  const { data, isLoading, error } = useStocks();
+  const { stocks, isLoading, error, refetch } = useStocks();
 
-  if (isLoading) return <Loading />;
-  if (error) return <ErrorMessage message={error.message} />;
-  if (!data?.stocks.length) return <EmptyState />;
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-destructive/10 rounded-lg">
+        <p className="text-destructive">{error}</p>
+        <Button onClick={refetch}>再試行</Button>
+      </div>
+    );
+  }
+
+  if (!stocks.length) {
+    return <div>データがありません</div>;
+  }
 
   return (
     <ul>
-      {data.stocks.map((stock) => (
+      {stocks.map((stock) => (
         <StockCard key={stock.symbol} stock={stock} />
       ))}
     </ul>
@@ -359,24 +394,52 @@ export function StockList() {
 }
 ```
 
-### Error Boundary
+---
 
-```tsx
-// app/error.tsx
-'use client';
+## ページ実装例
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-}) {
+```typescript
+// app/screener/page.tsx
+"use client";
+
+import { Header } from "@/components/layout/Header";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+
+import { StockTable } from "./_components/StockTable";
+import { FilterPanel } from "./_components/FilterPanel";
+import { useScreener } from "./_hooks/useScreener";
+
+export default function ScreenerPage() {
+  const { stocks, isLoading, error, filter, setFilter, refetch } = useScreener();
+
   return (
-    <div className="p-4">
-      <h2>Something went wrong</h2>
-      <p>{error.message}</p>
-      <button onClick={reset}>Try again</button>
+    <div className="min-h-screen bg-background">
+      <Header />
+      <main className="mx-auto max-w-7xl px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold">CAN-SLIM スクリーナー</h1>
+          <Button variant="outline" onClick={refetch} disabled={isLoading}>
+            <RefreshCw className={isLoading ? "animate-spin" : ""} />
+            更新
+          </Button>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-destructive/10 rounded-lg">
+            <p className="text-destructive">{error}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-1">
+            <FilterPanel filter={filter} onFilterChange={setFilter} />
+          </div>
+          <div className="lg:col-span-3">
+            <StockTable stocks={stocks} isLoading={isLoading} />
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -384,64 +447,8 @@ export default function Error({
 
 ---
 
-## テスト
+## 関連ドキュメント
 
-### コンポーネントテスト
-
-```typescript
-// __tests__/StockCard.test.tsx
-import { render, screen } from '@testing-library/react';
-import { StockCard } from '@/components/screener/StockCard';
-
-describe('StockCard', () => {
-  it('displays stock symbol and price', () => {
-    const stock = { symbol: 'AAPL', name: 'Apple', price: 185.5 };
-
-    render(<StockCard stock={stock} />);
-
-    expect(screen.getByText('AAPL')).toBeInTheDocument();
-    expect(screen.getByText('$185.50')).toBeInTheDocument();
-  });
-});
-```
-
----
-
-## パフォーマンス
-
-### 画像最適化
-
-```tsx
-import Image from 'next/image';
-
-// Good: next/image を使用
-<Image
-  src="/logo.png"
-  alt="Logo"
-  width={100}
-  height={100}
-  priority // Above the fold
-/>
-```
-
-### メモ化
-
-```tsx
-// 必要な場合のみ useMemo / useCallback
-const sortedStocks = useMemo(
-  () => stocks.sort((a, b) => b.rsRating - a.rsRating),
-  [stocks]
-);
-```
-
-### 遅延ロード
-
-```tsx
-import dynamic from 'next/dynamic';
-
-// 重いコンポーネントを遅延ロード
-const PriceChart = dynamic(
-  () => import('@/components/charts/PriceChart'),
-  { loading: () => <Loading /> }
-);
-```
+- `docs/poc/architectures/frontend-architecture.md` - フロントエンドアーキテクチャ
+- `docs/poc/architectures/directory-structure.md` - ディレクトリ構成
+- `docs/poc/coding-standard/tech-stack.md` - 技術スタック

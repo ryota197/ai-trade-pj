@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.domain.constants import CANSLIMThresholds
+from src.domain.constants import CANSLIMDefaults
 
 
 # ============================================================
@@ -15,17 +15,17 @@ from src.domain.constants import CANSLIMThresholds
 class ScreenerFilterInput:
     """スクリーニングフィルター 入力DTO"""
 
-    min_rs_rating: int = CANSLIMThresholds.MIN_RS_RATING
-    min_eps_growth_quarterly: float = CANSLIMThresholds.MIN_EPS_GROWTH_QUARTERLY
-    min_eps_growth_annual: float = CANSLIMThresholds.MIN_EPS_GROWTH_ANNUAL
-    max_distance_from_52w_high: float = CANSLIMThresholds.MAX_DISTANCE_FROM_52W_HIGH
-    min_volume_ratio: float = CANSLIMThresholds.MIN_VOLUME_RATIO
-    min_canslim_score: int = CANSLIMThresholds.MIN_CANSLIM_SCORE
+    min_rs_rating: int = CANSLIMDefaults.MIN_RS_RATING
+    min_eps_growth_quarterly: float = CANSLIMDefaults.MIN_EPS_GROWTH_QUARTERLY
+    min_eps_growth_annual: float = CANSLIMDefaults.MIN_EPS_GROWTH_ANNUAL
+    max_distance_from_52w_high: float = CANSLIMDefaults.MAX_DISTANCE_FROM_52W_HIGH
+    min_volume_ratio: float = CANSLIMDefaults.MIN_VOLUME_RATIO
+    min_canslim_score: int = CANSLIMDefaults.MIN_CANSLIM_SCORE
     min_market_cap: float | None = None
     max_market_cap: float | None = None
     symbols: list[str] | None = None
-    limit: int = CANSLIMThresholds.DEFAULT_LIMIT
-    offset: int = CANSLIMThresholds.DEFAULT_OFFSET
+    limit: int = CANSLIMDefaults.DEFAULT_LIMIT
+    offset: int = CANSLIMDefaults.DEFAULT_OFFSET
 
 
 @dataclass(frozen=True)

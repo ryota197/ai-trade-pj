@@ -10,196 +10,155 @@ PostgreSQL 16 を使用。Docker コンテナで起動。
 
 | テーブル名 | 説明 | 主な用途 |
 |-----------|------|---------|
+| stocks | 銘柄データ | スクリーニング結果、CAN-SLIM指標 |
 | market_snapshots | マーケット状態の履歴 | マーケット分析、トレンド確認 |
-| screener_results | スクリーニング結果のキャッシュ | スクリーニングの高速化 |
 | watchlist | ウォッチリスト | 監視銘柄の管理 |
 | paper_trades | ペーパートレード記録 | 仮想売買の記録 |
 | price_cache | 株価キャッシュ | API呼び出し削減 |
+| job_executions | ジョブ実行履歴 | バッチ処理の実行記録 |
 
 ---
 
 ## テーブル定義
 
+### stocks
+
+銘柄のスクリーニングデータを保存。CAN-SLIM指標を含む。
+
+| カラム | 型 | NULL | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | NO | 主キー |
+| symbol | VARCHAR(10) | NO | ティッカーシンボル（UNIQUE） |
+| name | VARCHAR(100) | YES | 銘柄名 |
+| industry | VARCHAR(50) | YES | 業種 |
+| market_cap | BIGINT | YES | 時価総額 |
+| price | DECIMAL(10,2) | YES | 現在株価 |
+| change_percent | DECIMAL(10,2) | YES | 変動率 |
+| volume | BIGINT | YES | 出来高 |
+| avg_volume_50d | BIGINT | YES | 50日平均出来高 |
+| week_52_high | DECIMAL(10,2) | YES | 52週高値 |
+| week_52_low | DECIMAL(10,2) | YES | 52週安値 |
+| eps_growth_quarterly | DECIMAL(10,2) | YES | C: 四半期EPS成長率 |
+| eps_growth_annual | DECIMAL(10,2) | YES | A: 年間EPS成長率 |
+| institutional_ownership | DECIMAL(10,2) | YES | I: 機関投資家保有率 |
+| relative_strength | DECIMAL(10,4) | YES | S&P500比の相対強度（生値） |
+| rs_rating | INTEGER | YES | L: RS Rating（1-99パーセンタイル） |
+| canslim_score | INTEGER | YES | CAN-SLIMスコア（0-100） |
+| updated_at | TIMESTAMP | NO | 最終更新日時 |
+| created_at | TIMESTAMP | NO | 作成日時 |
+
+**備考:**
+- `relative_strength`: 外部APIから計算した生値。Job 1 で保存。
+- `rs_rating`: 全銘柄の `relative_strength` からパーセンタイル計算。Job 2 で更新。
+- `canslim_score`: 各指標から総合スコア計算。Job 3 で更新。
+
+---
+
 ### market_snapshots
 
-マーケット状態の履歴を保存。1時間ごとにスナップショットを取得。
+マーケット状態の履歴を保存。定期的にスナップショットを取得。
 
-```sql
-CREATE TABLE market_snapshots (
-    id SERIAL PRIMARY KEY,
-    recorded_at TIMESTAMP NOT NULL,
+| カラム | 型 | NULL | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | NO | 主キー |
+| recorded_at | TIMESTAMP | NO | 記録日時 |
+| vix | DECIMAL(10,2) | NO | VIX指数 |
+| vix_signal | VARCHAR(20) | NO | VIXシグナル（bullish/neutral/bearish） |
+| sp500_price | DECIMAL(12,2) | NO | S&P500株価 |
+| sp500_rsi | DECIMAL(5,2) | NO | S&P500 RSI（14日） |
+| sp500_rsi_signal | VARCHAR(20) | NO | RSIシグナル |
+| sp500_ma200 | DECIMAL(12,2) | NO | S&P500 200日移動平均 |
+| sp500_above_ma200 | BOOLEAN | NO | 200MA上か |
+| put_call_ratio | DECIMAL(6,4) | NO | プット/コール比率 |
+| put_call_signal | VARCHAR(20) | NO | P/Cシグナル |
+| market_condition | VARCHAR(20) | NO | 判定結果（risk_on/risk_off/neutral） |
+| confidence | DECIMAL(5,4) | NO | 信頼度 |
+| score | INTEGER | NO | スコア（-5〜+5） |
+| recommendation | VARCHAR(500) | NO | 推奨アクション |
+| created_at | TIMESTAMP | NO | 作成日時 |
 
-    -- VIX関連
-    vix DECIMAL(10,2) NOT NULL,
-    vix_signal VARCHAR(20) NOT NULL,  -- 'bullish', 'neutral', 'bearish'
-
-    -- S&P500指標
-    sp500_price DECIMAL(12,2) NOT NULL,
-    sp500_rsi DECIMAL(5,2) NOT NULL,
-    sp500_rsi_signal VARCHAR(20) NOT NULL,  -- 'bullish', 'neutral', 'bearish'
-    sp500_ma200 DECIMAL(12,2) NOT NULL,
-    sp500_above_ma200 BOOLEAN NOT NULL,
-
-    -- Put/Call Ratio
-    put_call_ratio DECIMAL(6,4) NOT NULL,
-    put_call_signal VARCHAR(20) NOT NULL,  -- 'bullish', 'neutral', 'bearish'
-
-    -- 判定結果
-    market_condition VARCHAR(20) NOT NULL,  -- 'risk_on', 'risk_off', 'neutral'
-    confidence DECIMAL(5,4) NOT NULL,
-    score INTEGER NOT NULL,  -- -5 〜 +5
-    recommendation VARCHAR(500) NOT NULL,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT valid_market_condition CHECK (market_condition IN ('risk_on', 'risk_off', 'neutral')),
-    CONSTRAINT valid_vix_signal CHECK (vix_signal IN ('bullish', 'neutral', 'bearish')),
-    CONSTRAINT valid_rsi_signal CHECK (sp500_rsi_signal IN ('bullish', 'neutral', 'bearish')),
-    CONSTRAINT valid_pc_signal CHECK (put_call_signal IN ('bullish', 'neutral', 'bearish'))
-);
-
--- インデックス
-CREATE INDEX idx_market_snapshots_recorded_at ON market_snapshots(recorded_at DESC);
-```
-
-### screener_results
-
-CAN-SLIMスクリーニング結果をキャッシュ。
-
-```sql
-CREATE TABLE screener_results (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL,
-    screened_at TIMESTAMP NOT NULL,
-
-    -- 銘柄基本情報
-    name VARCHAR(100),
-    industry VARCHAR(50),
-    market_cap BIGINT,
-
-    -- 株価情報
-    price DECIMAL(10,2),
-    change_percent DECIMAL(10,2),
-    volume BIGINT,
-    avg_volume_50d BIGINT,
-
-    -- CAN-SLIM指標
-    eps_growth_q DECIMAL(10,2),       -- C: 四半期EPS成長率
-    eps_growth_y DECIMAL(10,2),       -- A: 年間EPS成長率
-    distance_from_high DECIMAL(10,2), -- N: 52週高値からの乖離
-    volume_ratio DECIMAL(10,2),       -- S: 出来高倍率
-    rs_rating DECIMAL(10,2),          -- L: RS Rating
-    institutional_holding DECIMAL(10,2), -- I: 機関投資家保有率
-
-    -- 判定結果
-    passes_canslim BOOLEAN DEFAULT FALSE,
-    canslim_score INTEGER,  -- 総合スコア（0-100）
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT unique_symbol_screened UNIQUE (symbol, screened_at)
-);
-
--- インデックス
-CREATE INDEX idx_screener_results_symbol ON screener_results(symbol);
-CREATE INDEX idx_screener_results_screened_at ON screener_results(screened_at DESC);
-CREATE INDEX idx_screener_results_passes ON screener_results(passes_canslim, screened_at DESC);
-CREATE INDEX idx_screener_results_rs_rating ON screener_results(rs_rating DESC);
-```
+---
 
 ### watchlist
 
 ウォッチリスト。監視したい銘柄を登録。
 
-```sql
-CREATE TABLE watchlist (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL UNIQUE,
+| カラム | 型 | NULL | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | NO | 主キー |
+| symbol | VARCHAR(10) | NO | ティッカーシンボル（UNIQUE） |
+| target_entry_price | DECIMAL(10,2) | YES | 目標エントリー価格 |
+| stop_loss_price | DECIMAL(10,2) | YES | ストップロス価格 |
+| target_profit_price | DECIMAL(10,2) | YES | 利確目標価格 |
+| notes | TEXT | YES | メモ |
+| pattern_detected | VARCHAR(50) | YES | 検出されたパターン |
+| alert_enabled | BOOLEAN | NO | アラート有効 |
+| added_at | TIMESTAMP | NO | 追加日時 |
+| updated_at | TIMESTAMP | NO | 更新日時 |
 
-    -- 目標価格
-    target_entry_price DECIMAL(10,2),
-    stop_loss_price DECIMAL(10,2),
-    target_profit_price DECIMAL(10,2),
-
-    -- メモ
-    notes TEXT,
-
-    -- 追加情報
-    pattern_detected VARCHAR(50),  -- 検出されたパターン
-    alert_enabled BOOLEAN DEFAULT TRUE,
-
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- インデックス
-CREATE INDEX idx_watchlist_symbol ON watchlist(symbol);
-```
+---
 
 ### paper_trades
 
 ペーパートレード（仮想売買）の記録。
 
-```sql
-CREATE TABLE paper_trades (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL,
+| カラム | 型 | NULL | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | NO | 主キー |
+| symbol | VARCHAR(10) | NO | ティッカーシンボル |
+| trade_type | VARCHAR(10) | NO | 売買種別（buy/sell） |
+| quantity | INTEGER | NO | 数量 |
+| entry_price | DECIMAL(10,2) | NO | エントリー価格 |
+| exit_price | DECIMAL(10,2) | YES | 決済価格 |
+| status | VARCHAR(20) | NO | ステータス（open/closed/cancelled） |
+| traded_at | TIMESTAMP | NO | 取引日時 |
+| closed_at | TIMESTAMP | YES | 決済日時 |
+| notes | TEXT | YES | メモ |
+| strategy | VARCHAR(50) | YES | 戦略（breakout/pullback等） |
+| created_at | TIMESTAMP | NO | 作成日時 |
 
-    -- トレード情報
-    trade_type VARCHAR(10) NOT NULL,  -- 'buy', 'sell'
-    quantity INTEGER NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    total_amount DECIMAL(12,2) GENERATED ALWAYS AS (quantity * price) STORED,
-
-    -- 実行日時
-    traded_at TIMESTAMP NOT NULL,
-
-    -- 関連情報
-    notes TEXT,
-    strategy VARCHAR(50),  -- 'breakout', 'pullback', 'swing' etc.
-
-    -- ポジション管理用
-    position_id UUID,  -- 同一ポジションのbuy/sellを紐付け
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT valid_trade_type CHECK (trade_type IN ('buy', 'sell')),
-    CONSTRAINT positive_quantity CHECK (quantity > 0),
-    CONSTRAINT positive_price CHECK (price > 0)
-);
-
--- インデックス
-CREATE INDEX idx_paper_trades_symbol ON paper_trades(symbol);
-CREATE INDEX idx_paper_trades_traded_at ON paper_trades(traded_at DESC);
-CREATE INDEX idx_paper_trades_position ON paper_trades(position_id);
-```
+---
 
 ### price_cache
 
-株価データのキャッシュ。yfinance API呼び出しを削減。
+株価データのキャッシュ。外部API呼び出しを削減。
 
-```sql
-CREATE TABLE price_cache (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL,
-    date DATE NOT NULL,
+| カラム | 型 | NULL | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | NO | 主キー |
+| symbol | VARCHAR(10) | NO | ティッカーシンボル |
+| date | DATE | NO | 日付 |
+| open | DECIMAL(10,2) | YES | 始値 |
+| high | DECIMAL(10,2) | YES | 高値 |
+| low | DECIMAL(10,2) | YES | 安値 |
+| close | DECIMAL(10,2) | YES | 終値 |
+| adj_close | DECIMAL(10,2) | YES | 調整後終値 |
+| volume | BIGINT | YES | 出来高 |
+| created_at | TIMESTAMP | NO | 作成日時 |
 
-    -- OHLCV
-    open DECIMAL(10,2),
-    high DECIMAL(10,2),
-    low DECIMAL(10,2),
-    close DECIMAL(10,2),
-    adj_close DECIMAL(10,2),
-    volume BIGINT,
+**制約:** `(symbol, date)` でユニーク
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+---
 
-    CONSTRAINT unique_symbol_date UNIQUE (symbol, date)
-);
+### job_executions
 
--- インデックス
-CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
-```
+ジョブ実行履歴。完了時に1レコード INSERT。
+
+| カラム | 型 | NULL | 説明 |
+|-------|-----|------|------|
+| id | UUID | NO | ジョブID（PK） |
+| job_type | VARCHAR(50) | NO | ジョブ種別（refresh_screener等） |
+| status | VARCHAR(20) | NO | 結果（completed/failed） |
+| started_at | TIMESTAMP | NO | 開始日時 |
+| completed_at | TIMESTAMP | NO | 完了日時 |
+| duration_seconds | INTEGER | NO | 実行時間（秒） |
+| result | JSONB | YES | 実行結果 |
+| error_message | TEXT | YES | エラー時のメッセージ |
+| created_at | TIMESTAMP | NO | 作成日時 |
+
+**備考:**
+- ジョブ完了時に1回だけ INSERT（進捗更新なし）
+- `result` 例: `{"succeeded": 498, "failed": 2, "errors": [...]}`
 
 ---
 
@@ -207,46 +166,34 @@ CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
 
 ```
 ┌─────────────────────┐
-│  market_snapshots   │
+│       stocks        │
 ├─────────────────────┤
 │ id (PK)             │
-│ recorded_at         │
-│ vix                 │
-│ vix_signal          │
-│ sp500_price         │
-│ sp500_rsi           │
-│ sp500_rsi_signal    │
-│ sp500_ma200         │
-│ sp500_above_ma200   │
-│ put_call_ratio      │
-│ put_call_signal     │
-│ market_condition    │
-│ confidence          │
-│ score               │
-│ recommendation      │
-│ created_at          │
-└─────────────────────┘
-
-┌─────────────────────┐
-│  screener_results   │
-├─────────────────────┤
-│ id (PK)             │
-│ symbol              │───┐
-│ screened_at         │   │
-│ eps_growth_q        │   │
+│ symbol (UNIQUE)     │───┐
+│ name                │   │
+│ price               │   │
+│ relative_strength   │   │
 │ rs_rating           │   │
-│ passes_canslim      │   │
+│ canslim_score       │   │
 │ ...                 │   │
 └─────────────────────┘   │
-                          │ symbol
+                          │
+┌─────────────────────┐   │
+│  market_snapshots   │   │
+├─────────────────────┤   │
+│ id (PK)             │   │
+│ recorded_at         │   │
+│ vix                 │   │
+│ market_condition    │   │
+│ ...                 │   │
+└─────────────────────┘   │
+                          │ symbol (論理関連)
 ┌─────────────────────┐   │
 │     watchlist       │   │
 ├─────────────────────┤   │
 │ id (PK)             │   │
 │ symbol (UNIQUE)     │◄──┤
 │ target_entry_price  │   │
-│ stop_loss_price     │   │
-│ notes               │   │
 │ ...                 │   │
 └─────────────────────┘   │
                           │
@@ -257,9 +204,6 @@ CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
 │ symbol              │◄──┤
 │ trade_type          │   │
 │ quantity            │   │
-│ price               │   │
-│ traded_at           │   │
-│ position_id         │   │
 │ ...                 │   │
 └─────────────────────┘   │
                           │
@@ -269,57 +213,40 @@ CREATE INDEX idx_price_cache_symbol_date ON price_cache(symbol, date DESC);
 │ id (PK)             │   │
 │ symbol              │◄──┘
 │ date                │
-│ open/high/low/close │
-│ volume              │
-│ ...                 │
+│ OHLCV               │
+└─────────────────────┘
+
+┌─────────────────────┐
+│   job_executions     │
+├─────────────────────┤
+│ id (PK, UUID)       │
+│ job_type            │
+│ status              │
+│ started_at          │
+│ completed_at        │
+│ result (JSONB)      │
 └─────────────────────┘
 ```
 
 ※ symbol での論理的な関連はあるが、外部キー制約は設けない（柔軟性重視）
+※ job_executions は他テーブルとの関連なし（独立した履歴テーブル）
 
 ---
 
-## マイグレーション
+## インデックス設計
 
-### 初期セットアップ
-
-```sql
--- init.sql
--- Docker起動時に自動実行される
-
--- 拡張機能
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- テーブル作成（上記DDLを順次実行）
-```
-
-### Docker Compose設定
-
-```yaml
-services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: trader
-      POSTGRES_PASSWORD: localdev
-      POSTGRES_DB: trading
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-```
-
----
-
-## インデックス設計方針
-
-| 目的 | インデックス |
-|-----|-------------|
-| 時系列クエリ | `recorded_at DESC`, `traded_at DESC` |
-| シンボル検索 | `symbol` |
-| スクリーニング | `passes_canslim`, `rs_rating DESC` |
-| 複合検索 | `(symbol, date)` |
+| テーブル | インデックス | 目的 |
+|---------|-------------|------|
+| stocks | symbol | シンボル検索 |
+| stocks | rs_rating DESC | スクリーニング順位 |
+| stocks | canslim_score DESC | スコア順ソート |
+| market_snapshots | recorded_at DESC | 時系列クエリ |
+| watchlist | symbol | シンボル検索 |
+| paper_trades | symbol | シンボル検索 |
+| paper_trades | traded_at DESC | 時系列クエリ |
+| paper_trades | status | ステータス絞り込み |
+| price_cache | (symbol, date) DESC | 銘柄×日付の複合検索 |
+| job_executions | job_type, created_at DESC | ジョブ種別×日時検索 |
 
 ---
 
@@ -327,20 +254,16 @@ services:
 
 | テーブル | 保持期間 | 理由 |
 |---------|---------|------|
+| stocks | 無期限 | スクリーニングデータ |
 | market_snapshots | 無期限 | 過去のマーケット分析に使用 |
-| screener_results | 30日 | 最新データのみ必要 |
 | watchlist | 無期限 | ユーザーデータ |
 | paper_trades | 無期限 | パフォーマンス分析に使用 |
 | price_cache | 2年 | 長期チャート分析用 |
+| job_executions | 90日 | 直近の実行履歴のみ必要 |
 
-### クリーンアップジョブ（将来実装）
+---
 
-```sql
--- 古いスクリーニング結果を削除
-DELETE FROM screener_results
-WHERE screened_at < NOW() - INTERVAL '30 days';
+## 関連ドキュメント
 
--- 古い株価キャッシュを削除
-DELETE FROM price_cache
-WHERE date < NOW() - INTERVAL '2 years';
-```
+- `backend/src/infrastructure/database/init.sql` - DDL定義
+- `docs/poc/plan/refresh-screener-usecase.md` - ジョブ設計（stocks更新）

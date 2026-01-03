@@ -10,7 +10,7 @@ from src.application.use_cases.screener.get_stock_detail import GetStockDetailUs
 from src.application.use_cases.screener.screen_canslim_stocks import (
     ScreenCANSLIMStocksUseCase,
 )
-from src.domain.constants import CANSLIMThresholds
+from src.domain.constants import CANSLIMDefaults
 from src.presentation.dependencies import (
     get_screen_canslim_use_case,
     get_stock_detail_use_case,
@@ -26,7 +26,7 @@ from src.presentation.schemas.screener import (
 )
 
 # 定数エイリアス（可読性向上）
-_T = CANSLIMThresholds
+_D = CANSLIMDefaults
 
 router = APIRouter(prefix="/screener", tags=["screener"])
 
@@ -39,27 +39,27 @@ router = APIRouter(prefix="/screener", tags=["screener"])
 )
 async def screen_canslim_stocks(
     min_rs_rating: int = Query(
-        _T.MIN_RS_RATING, ge=1, le=99, description="最小RS Rating"
+        _D.MIN_RS_RATING, ge=1, le=99, description="最小RS Rating"
     ),
     min_eps_growth_quarterly: float = Query(
-        _T.MIN_EPS_GROWTH_QUARTERLY, description="最小四半期EPS成長率（%）"
+        _D.MIN_EPS_GROWTH_QUARTERLY, description="最小四半期EPS成長率（%）"
     ),
     min_eps_growth_annual: float = Query(
-        _T.MIN_EPS_GROWTH_ANNUAL, description="最小年間EPS成長率（%）"
+        _D.MIN_EPS_GROWTH_ANNUAL, description="最小年間EPS成長率（%）"
     ),
     max_distance_from_52w_high: float = Query(
-        _T.MAX_DISTANCE_FROM_52W_HIGH, description="最大52週高値乖離率（%）"
+        _D.MAX_DISTANCE_FROM_52W_HIGH, description="最大52週高値乖離率（%）"
     ),
     min_volume_ratio: float = Query(
-        _T.MIN_VOLUME_RATIO, description="最小出来高倍率"
+        _D.MIN_VOLUME_RATIO, description="最小出来高倍率"
     ),
     min_canslim_score: int = Query(
-        _T.MIN_CANSLIM_SCORE, ge=0, le=100, description="最小CAN-SLIMスコア"
+        _D.MIN_CANSLIM_SCORE, ge=0, le=100, description="最小CAN-SLIMスコア"
     ),
     limit: int = Query(
-        _T.DEFAULT_LIMIT, ge=1, le=_T.MAX_LIMIT, description="取得件数"
+        _D.DEFAULT_LIMIT, ge=1, le=_D.MAX_LIMIT, description="取得件数"
     ),
-    offset: int = Query(_T.DEFAULT_OFFSET, ge=0, description="オフセット"),
+    offset: int = Query(_D.DEFAULT_OFFSET, ge=0, description="オフセット"),
     use_case: ScreenCANSLIMStocksUseCase = Depends(get_screen_canslim_use_case),
 ) -> ApiResponse[ScreenerResponse]:
     """CAN-SLIM条件でスクリーニングを実行"""

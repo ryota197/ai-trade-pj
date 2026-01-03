@@ -9,7 +9,7 @@ from src.application.dto.portfolio_dto import (
     WatchlistItemOutput,
     WatchlistOutput,
 )
-from src.domain.entities.watchlist_item import WatchlistItem, WatchlistStatus
+from src.domain.models.watchlist_item import WatchlistItem, WatchlistStatus
 from src.domain.repositories.watchlist_repository import WatchlistRepository
 
 

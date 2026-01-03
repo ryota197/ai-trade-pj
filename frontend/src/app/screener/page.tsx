@@ -1,10 +1,12 @@
 "use client";
 
-import { Header } from "@/components/layout";
-import { FilterPanel, StockTable } from "@/components/screener";
-import { useScreener } from "@/hooks/useScreener";
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
+import { RefreshCw, AlertCircle } from "lucide-react";
+
+import { FilterPanel } from "./_components/FilterPanel";
+import { StockTable } from "./_components/StockTable";
+import { useScreener } from "./_hooks/useScreener";
 
 /**
  * スクリーナーページ

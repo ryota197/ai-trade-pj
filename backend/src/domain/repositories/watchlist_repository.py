@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from src.domain.entities.watchlist_item import WatchlistItem, WatchlistStatus
+from src.domain.models.watchlist_item import WatchlistItem, WatchlistStatus
 
 
 class WatchlistRepository(ABC):
