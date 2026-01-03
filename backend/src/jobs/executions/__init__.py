@@ -1,37 +1,36 @@
 """Job Executions - 個別ジョブ実装"""
 
-from src.jobs.executions.calculate_canslim import (
-    CalculateCANSLIMJob,
-    CalculateCANSLIMOutput,
-)
-from src.jobs.executions.calculate_rs_rating import (
-    CalculateRSRatingJob,
-    CalculateRSRatingOutput,
-)
-from src.jobs.executions.collect_benchmarks import (
-    CollectBenchmarksInput,
-    CollectBenchmarksJob,
-    CollectBenchmarksOutput,
-)
 from src.jobs.executions.collect_stock_data import (
     CollectInput,
     CollectOutput,
     CollectStockDataJob,
 )
 
+# TODO: Job 2, 3 を新しいドメインモデルに合わせて修正後にインポートを有効化
+# from src.jobs.executions.calculate_rs_rating import (
+#     CalculateRSRatingJob,
+#     CalculateRSRatingOutput,
+# )
+# from src.jobs.executions.calculate_canslim import (
+#     CalculateCANSLIMJob,
+#     CalculateCANSLIMOutput,
+# )
+
+# TODO: Job 0 は現在の設計では不要（Job 1 内でベンチマーク取得）
+# from src.jobs.executions.collect_benchmarks import (
+#     CollectBenchmarksInput,
+#     CollectBenchmarksJob,
+#     CollectBenchmarksOutput,
+# )
+
 __all__ = [
-    # Job 0: ベンチマーク収集
-    "CollectBenchmarksInput",
-    "CollectBenchmarksOutput",
-    "CollectBenchmarksJob",
     # Job 1: データ収集
     "CollectInput",
     "CollectOutput",
     "CollectStockDataJob",
-    # Job 2: RS Rating 計算
-    "CalculateRSRatingOutput",
-    "CalculateRSRatingJob",
-    # Job 3: CAN-SLIM スコア計算
-    "CalculateCANSLIMOutput",
-    "CalculateCANSLIMJob",
+    # TODO: Job 2, 3 修正後に追加
+    # "CalculateRSRatingOutput",
+    # "CalculateRSRatingJob",
+    # "CalculateCANSLIMOutput",
+    # "CalculateCANSLIMJob",
 ]

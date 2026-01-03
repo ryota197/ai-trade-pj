@@ -1,19 +1,13 @@
 """データ収集ジョブ (Job 1)"""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
-from src.application.interfaces.financial_data_gateway import (
-    FinancialDataGateway,
-)
-from src.domain.models import PriceSnapshot, StockIdentity, StockMetrics
-from src.domain.repositories import (
-    BenchmarkRepository,
-    PriceSnapshotRepository,
-    StockIdentityRepository,
-    StockMetricsRepository,
-)
-from src.domain.services import PriceBar, RelativeStrengthCalculator
+from src.application.interfaces.financial_data_gateway import FinancialDataGateway
+from src.domain.models.canslim_stock import CANSLIMStock
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
+from src.domain.services.rs_calculator import PriceBar, RSCalculator
 from src.jobs.lib.base import Job
 
 
@@ -44,57 +38,45 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
     責務:
         - 株価データ取得（quote, history）
         - 財務データ取得（EPS, institutional ownership等）
-        - 3テーブルへのINSERT（stocks, stock_prices, stock_metrics）
+        - canslim_stocks テーブルへのUPSERT
+        - relative_strength の計算
 
     注意:
-        - relative_strength 計算は RelativeStrengthCalculator に委譲
         - rs_rating, canslim_score は計算しない（後続ジョブに委譲）
         - 各銘柄は独立して処理（1銘柄の失敗が他に影響しない）
-        - ベンチマークは Job 0 で事前に保存されている前提
     """
 
     name = "collect_stock_data"
 
     def __init__(
         self,
-        stock_identity_repository: StockIdentityRepository,
-        price_snapshot_repository: PriceSnapshotRepository,
-        stock_metrics_repository: StockMetricsRepository,
-        benchmark_repository: BenchmarkRepository,
+        stock_repository: CANSLIMStockRepository,
         financial_gateway: FinancialDataGateway,
-        rs_calculator: RelativeStrengthCalculator | None = None,
+        rs_calculator: RSCalculator | None = None,
     ) -> None:
-        self._identity_repo = stock_identity_repository
-        self._price_repo = price_snapshot_repository
-        self._metrics_repo = stock_metrics_repository
-        self._benchmark_repo = benchmark_repository
+        self._stock_repo = stock_repository
         self._gateway = financial_gateway
-        self._rs_calculator = rs_calculator or RelativeStrengthCalculator()
+        self._rs_calculator = rs_calculator or RSCalculator()
 
     async def execute(self, input_: CollectInput) -> CollectOutput:
         """ジョブ実行"""
         succeeded = 0
         failed = 0
         errors: list[dict] = []
+        target_date = date.today()
 
-        # DBからS&P500のIBD式加重パフォーマンスを取得（API呼び出しなし）
-        benchmark_weighted_perf = await self._benchmark_repo.get_latest_weighted_performance("^GSPC")
-        if benchmark_weighted_perf is None:
-            return CollectOutput(
-                processed=0,
-                succeeded=0,
-                failed=len(input_.symbols),
-                errors=[
-                    {
-                        "symbol": "*",
-                        "error": "Benchmark not found. Run Job 0 first.",
-                    }
-                ],
-            )
+        # S&P500の履歴を取得（RS計算用ベンチマーク）
+        benchmark_bars: list[PriceBar] = []
+        try:
+            sp500_history = await self._gateway.get_sp500_history(period="1y")
+            benchmark_bars = [PriceBar(close=bar.close) for bar in sp500_history]
+        except Exception as e:
+            # ベンチマーク取得失敗は警告のみ（RS計算がスキップされる）
+            errors.append({"symbol": "^GSPC", "error": f"Benchmark fetch failed: {e}"})
 
         for symbol in input_.symbols:
             try:
-                await self._process_single_symbol(symbol, benchmark_weighted_perf)
+                await self._process_single_symbol(symbol, target_date, benchmark_bars)
                 succeeded += 1
             except Exception as e:
                 failed += 1
@@ -110,11 +92,10 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
     async def _process_single_symbol(
         self,
         symbol: str,
-        benchmark_weighted_perf: float,
+        target_date: date,
+        benchmark_bars: list[PriceBar],
     ) -> None:
         """単一銘柄のデータを処理"""
-        now = datetime.now(timezone.utc)
-
         # 株価データ取得
         quote = await self._gateway.get_quote(symbol)
         if quote is None:
@@ -123,53 +104,56 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
         # 財務データ取得
         financials = await self._gateway.get_financial_metrics(symbol)
 
-        # 株価履歴取得（relative_strength計算用）
-        history = await self._gateway.get_price_history(symbol, period="1y")
+        # 株価履歴取得（RS計算用）
+        stock_bars: list[PriceBar] = []
+        try:
+            history = await self._gateway.get_price_history(symbol, period="1y")
+            stock_bars = [PriceBar(close=bar.close) for bar in history]
+        except Exception:
+            pass
 
-        # IBD式 relative_strength 計算（ドメインサービスに委譲）
-        relative_strength = None
-        if history:
-            price_bars = [PriceBar(close=bar.close) for bar in history]
-            relative_strength = self._rs_calculator.calculate_relative_strength(
-                stock_bars=price_bars,
-                benchmark_weighted_performance=benchmark_weighted_perf,
-            )
+        # 相対強度を計算
+        relative_strength: Decimal | None = None
+        if stock_bars and benchmark_bars:
+            relative_strength = self._rs_calculator.calculate(stock_bars, benchmark_bars)
 
-        # 1. 銘柄マスター保存
-        identity = StockIdentity(
-            symbol=symbol,
-            name=quote.symbol,  # TODO: 名前を別途取得
-            industry=None,  # TODO: 業種を取得
-        )
-        await self._identity_repo.save(identity)
-
-        # 2. 価格スナップショット保存
-        price = PriceSnapshot(
-            symbol=symbol,
-            price=quote.price,
-            change_percent=quote.change_percent,
+        # CANSLIMStockを構築して保存
+        stock = CANSLIMStock(
+            symbol=symbol.upper(),
+            date=target_date,
+            name=symbol,  # TODO: 名前取得
+            industry=None,
+            price=Decimal(str(quote.price)),
+            change_percent=Decimal(str(quote.change_percent)),
             volume=quote.volume,
             avg_volume_50d=quote.avg_volume,
-            market_cap=int(quote.market_cap) if quote.market_cap else None,
-            week_52_high=quote.week_52_high,
-            week_52_low=quote.week_52_low,
-            recorded_at=now,
-        )
-        await self._price_repo.save(price)
-
-        # 3. 計算指標保存（rs_rating, canslim_score は NULL）
-        metrics = StockMetrics(
-            symbol=symbol,
-            eps_growth_quarterly=(
-                financials.eps_growth_quarterly if financials else None
+            market_cap=quote.market_cap,
+            week_52_high=(
+                Decimal(str(quote.week_52_high)) if quote.week_52_high else None
             ),
-            eps_growth_annual=financials.eps_growth_annual if financials else None,
+            week_52_low=(
+                Decimal(str(quote.week_52_low)) if quote.week_52_low else None
+            ),
+            eps_growth_quarterly=(
+                Decimal(str(financials.eps_growth_quarterly))
+                if financials and financials.eps_growth_quarterly
+                else None
+            ),
+            eps_growth_annual=(
+                Decimal(str(financials.eps_growth_annual))
+                if financials and financials.eps_growth_annual
+                else None
+            ),
             institutional_ownership=(
-                financials.institutional_ownership if financials else None
+                Decimal(str(financials.institutional_ownership))
+                if financials and financials.institutional_ownership
+                else None
             ),
             relative_strength=relative_strength,
-            rs_rating=None,  # Job 2 で計算
-            canslim_score=None,  # Job 3 で計算
-            calculated_at=now,
+            # RS Rating と CAN-SLIM スコアは Job 2, Job 3 で計算
+            rs_rating=None,
+            canslim_score=None,
+            updated_at=datetime.now(timezone.utc),
         )
-        await self._metrics_repo.save(metrics)
+
+        self._stock_repo.save(stock)
