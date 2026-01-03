@@ -657,7 +657,7 @@ backend/src/
 |---------|------|---------|
 | `collect_stock_data.py` | **修正済み** | CANSLIMStock, CANSLIMStockRepository に変更 |
 | `calculate_rs_rating.py` | **修正済み** | CANSLIMStockRepository.update_rs_ratings() に変更 |
-| `calculate_canslim.py` | 未修正 | CANSLIMStockRepository.update_canslim_scores() に変更 |
+| `calculate_canslim.py` | **修正済み** | CANSLIMStockRepository.update_canslim_scores() に変更 |
 | `collect_benchmarks.py` | 未使用 | 削除または統合（Job 1内でS&P500履歴を取得する設計に変更済み） |
 
 #### 修正方針

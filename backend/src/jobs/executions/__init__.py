@@ -10,14 +10,13 @@ from src.jobs.executions.calculate_rs_rating import (
     CalculateRSRatingJob,
     CalculateRSRatingOutput,
 )
+from src.jobs.executions.calculate_canslim import (
+    CalculateCANSLIMInput,
+    CalculateCANSLIMJob,
+    CalculateCANSLIMOutput,
+)
 
-# TODO: Job 3 を新しいドメインモデルに合わせて修正後にインポートを有効化
-# from src.jobs.executions.calculate_canslim import (
-#     CalculateCANSLIMJob,
-#     CalculateCANSLIMOutput,
-# )
-
-# TODO: Job 0 は現在の設計では不要（Job 1 内でベンチマーク取得）
+# NOTE: Job 0 は現在の設計では不要（Job 1 内でベンチマーク取得）
 # from src.jobs.executions.collect_benchmarks import (
 #     CollectBenchmarksInput,
 #     CollectBenchmarksJob,
@@ -33,7 +32,8 @@ __all__ = [
     "CalculateRSRatingInput",
     "CalculateRSRatingOutput",
     "CalculateRSRatingJob",
-    # TODO: Job 3 修正後に追加
-    # "CalculateCANSLIMOutput",
-    # "CalculateCANSLIMJob",
+    # Job 3: CAN-SLIM スコア計算
+    "CalculateCANSLIMInput",
+    "CalculateCANSLIMOutput",
+    "CalculateCANSLIMJob",
 ]

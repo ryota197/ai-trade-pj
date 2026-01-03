@@ -29,6 +29,10 @@ class CANSLIMScorer:
     なぜドメインサービスか:
     - 市場状態（M）の判定に外部コンテキスト（Market Context）の情報が必要
     - 評価ルールが複雑で、集約のメソッドとしては肥大化する
+
+    スコアリング閾値:
+    - すべての閾値は CANSLIMDefaults で一元管理
+    - 詳細は src/domain/constants/canslim_defaults.py を参照
     """
 
     def score(
@@ -71,108 +75,108 @@ class CANSLIMScorer:
     def _score_current_earnings(self, stock: CANSLIMStock) -> int:
         """C: 当期利益成長率の評価"""
         if stock.eps_growth_quarterly is None:
-            return 50  # データなしは中立
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         growth = float(stock.eps_growth_quarterly)
-        if growth >= 50:
-            return 100
+        if growth >= CANSLIMDefaults.EPS_QUARTERLY_EXCELLENT:
+            return CANSLIMDefaults.SCORE_EXCELLENT
         if growth >= CANSLIMDefaults.MIN_EPS_GROWTH_QUARTERLY:
-            return 80
+            return CANSLIMDefaults.SCORE_GOOD
         if growth >= 0:
-            return 50
-        return 20
+            return CANSLIMDefaults.SCORE_NEUTRAL
+        return CANSLIMDefaults.SCORE_BAD
 
     def _score_annual_earnings(self, stock: CANSLIMStock) -> int:
         """A: 年間利益成長率の評価"""
         if stock.eps_growth_annual is None:
-            return 50  # データなしは中立
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         growth = float(stock.eps_growth_annual)
-        if growth >= 50:
-            return 100
+        if growth >= CANSLIMDefaults.EPS_ANNUAL_EXCELLENT:
+            return CANSLIMDefaults.SCORE_EXCELLENT
         if growth >= CANSLIMDefaults.MIN_EPS_GROWTH_ANNUAL:
-            return 80
+            return CANSLIMDefaults.SCORE_GOOD
         if growth >= 0:
-            return 50
-        return 20
+            return CANSLIMDefaults.SCORE_NEUTRAL
+        return CANSLIMDefaults.SCORE_BAD
 
     def _score_new_high(self, stock: CANSLIMStock) -> int:
         """N: 52週高値近接度の評価"""
         if stock.price is None or stock.week_52_high is None:
-            return 50  # データなしは中立
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         if stock.week_52_high == 0:
-            return 50
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         distance = float(
             (stock.week_52_high - stock.price) / stock.week_52_high * 100
         )
 
-        if distance <= 0:  # 新高値
-            return 100
-        if distance <= 5:
-            return 90
+        if distance <= CANSLIMDefaults.NEW_HIGH_EXCELLENT:
+            return CANSLIMDefaults.SCORE_EXCELLENT
+        if distance <= CANSLIMDefaults.NEW_HIGH_GOOD:
+            return 90  # SCORE_EXCELLENT と SCORE_GOOD の間
         if distance <= CANSLIMDefaults.MAX_DISTANCE_FROM_52W_HIGH:
-            return 70
-        if distance <= 25:
-            return 40
-        return 20
+            return CANSLIMDefaults.SCORE_FAIR + 10  # 70点
+        if distance <= CANSLIMDefaults.NEW_HIGH_POOR:
+            return CANSLIMDefaults.SCORE_POOR
+        return CANSLIMDefaults.SCORE_BAD
 
     def _score_supply_demand(self, stock: CANSLIMStock) -> int:
         """S: 出来高（需給）の評価"""
         if stock.volume is None or stock.avg_volume_50d is None:
-            return 50  # データなしは中立
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         if stock.avg_volume_50d == 0:
-            return 50
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         ratio = stock.volume / stock.avg_volume_50d
 
-        if ratio >= 2.0:
-            return 100
+        if ratio >= CANSLIMDefaults.VOLUME_EXCELLENT:
+            return CANSLIMDefaults.SCORE_EXCELLENT
         if ratio >= CANSLIMDefaults.MIN_VOLUME_RATIO:
-            return 80
-        if ratio >= 1.0:
-            return 60
-        return 40
+            return CANSLIMDefaults.SCORE_GOOD
+        if ratio >= CANSLIMDefaults.VOLUME_FAIR:
+            return CANSLIMDefaults.SCORE_FAIR
+        return CANSLIMDefaults.SCORE_POOR
 
     def _score_leader(self, stock: CANSLIMStock) -> int:
         """L: RS Ratingに基づく評価"""
         if stock.rs_rating is None:
-            return 50  # データなしは中立
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         rs = stock.rs_rating
-        if rs >= 90:
-            return 100
+        if rs >= CANSLIMDefaults.RS_EXCELLENT:
+            return CANSLIMDefaults.SCORE_EXCELLENT
         if rs >= CANSLIMDefaults.LEADER_RS_THRESHOLD:
-            return 80
-        if rs >= 70:
-            return 60
+            return CANSLIMDefaults.SCORE_GOOD
+        if rs >= CANSLIMDefaults.RS_FAIR:
+            return CANSLIMDefaults.SCORE_FAIR
         if rs >= CANSLIMDefaults.LAGGARD_RS_THRESHOLD:
-            return 40
-        return 20
+            return CANSLIMDefaults.SCORE_POOR
+        return CANSLIMDefaults.SCORE_BAD
 
     def _score_institutional(self, stock: CANSLIMStock) -> int:
         """I: 機関投資家保有率の評価"""
         if stock.institutional_ownership is None:
-            return 50  # データなしは中立
+            return CANSLIMDefaults.SCORE_NEUTRAL
 
         ownership = float(stock.institutional_ownership)
-        if ownership >= 50:
-            return 100
-        if ownership >= 25:
-            return 80
-        if ownership >= 10:
-            return 60
-        return 40
+        if ownership >= CANSLIMDefaults.INSTITUTIONAL_EXCELLENT:
+            return CANSLIMDefaults.SCORE_EXCELLENT
+        if ownership >= CANSLIMDefaults.INSTITUTIONAL_GOOD:
+            return CANSLIMDefaults.SCORE_GOOD
+        if ownership >= CANSLIMDefaults.INSTITUTIONAL_FAIR:
+            return CANSLIMDefaults.SCORE_FAIR
+        return CANSLIMDefaults.SCORE_POOR
 
     def _score_market(self, market_condition: MarketCondition) -> int:
         """M: 市場状態の評価"""
         if market_condition == MarketCondition.RISK_ON:
-            return 100
+            return CANSLIMDefaults.SCORE_EXCELLENT
         if market_condition == MarketCondition.NEUTRAL:
-            return 50
-        return 20  # RISK_OFF
+            return CANSLIMDefaults.SCORE_NEUTRAL
+        return CANSLIMDefaults.SCORE_BAD  # RISK_OFF
 
     def _calculate_total(
         self,
