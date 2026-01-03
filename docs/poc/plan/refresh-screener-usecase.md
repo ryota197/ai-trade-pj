@@ -641,10 +641,82 @@ backend/src/
 
 ### 未実装
 
-- [ ] admin_controller に GET /status, DELETE 追加
+- [x] admin_controller に GET /status, DELETE 追加
 - [ ] Job 2: RS Rating 一括計算の統合
 - [ ] Job 3: CAN-SLIM スコア一括計算の統合
 - [ ] Frontend 進捗表示（ポーリング）
+
+### 要修正: jobs/executions/ のリファクタリング
+
+ドメイン層リファクタリングにより、`jobs/executions/` 配下のファイルが壊れている。
+以下のファイルを新しいドメインモデル（CANSLIMStock, CANSLIMStockRepository）に合わせて修正が必要。
+
+#### 対象ファイル
+
+| ファイル | 現状 | 修正方針 |
+|---------|------|---------|
+| `collect_stock_data.py` | 削除されたモデル/リポジトリを使用 | CANSLIMStock, CANSLIMStockRepository に変更 |
+| `calculate_rs_rating.py` | StockMetricsRepository を使用 | CANSLIMStockRepository.update_rs_ratings() に変更 |
+| `calculate_canslim.py` | StockQueryRepository, StockMetricsRepository を使用 | CANSLIMStockRepository.update_canslim_scores() に変更 |
+| `collect_benchmarks.py` | MarketBenchmark, BenchmarkRepository を使用 | 削除または統合（Job 1内でS&P500履歴を取得する設計に変更済み） |
+
+#### 修正方針
+
+**1. collect_stock_data.py (Job 1)**
+
+```python
+# Before（壊れている）
+from src.domain.models import PriceSnapshot, StockIdentity, StockMetrics
+from src.domain.repositories import (
+    BenchmarkRepository,
+    PriceSnapshotRepository,
+    StockIdentityRepository,
+    StockMetricsRepository,
+)
+
+# After
+from src.domain.models.canslim_stock import CANSLIMStock
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
+```
+
+**2. calculate_rs_rating.py (Job 2)**
+
+```python
+# Before（壊れている）
+from src.domain.repositories import StockMetricsRepository
+
+# After
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
+
+# 使用メソッド:
+# - find_all_with_relative_strength(target_date)
+# - update_rs_ratings(target_date, {symbol: rs_rating})
+```
+
+**3. calculate_canslim.py (Job 3)**
+
+```python
+# Before（壊れている）
+from src.domain.repositories import StockMetricsRepository, StockQueryRepository
+
+# After
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
+
+# 使用メソッド:
+# - find_all_by_date(target_date)  ※ rs_rating が設定済みのもの
+# - update_canslim_scores(target_date, {symbol: {canslim_score, score_c, ...}})
+```
+
+**4. collect_benchmarks.py (Job 0)**
+
+現在の設計では Job 1 内で S&P500 履歴を直接取得しているため、このジョブは不要。
+削除するか、将来の拡張用に残す場合は別途検討。
+
+#### 優先度
+
+1. **High**: collect_stock_data.py - Job 1 が動かないと全体が動かない
+2. **Medium**: calculate_rs_rating.py, calculate_canslim.py - Job 2, 3 の統合
+3. **Low**: collect_benchmarks.py - 現在の設計では不要
 
 ---
 
