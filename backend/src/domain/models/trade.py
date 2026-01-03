@@ -29,11 +29,11 @@ class Trade:
     仮想売買の記録を表すエンティティ。
     """
 
-    id: int
     symbol: str
     trade_type: TradeType
     quantity: int
     entry_price: Decimal
+    id: int | None = None  # DBで自動生成、新規作成時はNone
     status: TradeStatus = TradeStatus.OPEN
     exit_price: Decimal | None = None
     traded_at: datetime = field(default_factory=datetime.now)

@@ -1,42 +1,29 @@
 """Infrastructure Repositories"""
 
-from src.infrastructure.repositories.postgres_benchmark_repository import (
-    PostgresBenchmarkRepository,
+from src.infrastructure.repositories.postgres_canslim_stock_repository import (
+    PostgresCANSLIMStockRepository,
 )
-from src.infrastructure.repositories.postgres_market_repository import (
-    PostgresMarketRepository,
+from src.infrastructure.repositories.postgres_market_snapshot_repository import (
+    PostgresMarketSnapshotRepository,
 )
-from src.infrastructure.repositories.postgres_price_snapshot_repository import (
-    PostgresPriceSnapshotRepository,
+from src.infrastructure.repositories.postgres_refresh_job_repository import (
+    PostgresRefreshJobRepository,
+    RefreshJob,
+    RefreshJobRepository,
 )
-from src.infrastructure.repositories.postgres_stock_identity_repository import (
-    PostgresStockIdentityRepository,
+from src.infrastructure.repositories.postgres_trade_repository import (
+    PostgresTradeRepository,
 )
-from src.infrastructure.repositories.postgres_stock_metrics_repository import (
-    PostgresStockMetricsRepository,
-)
-from src.infrastructure.repositories.postgres_stock_query_repository import (
-    PostgresStockQueryRepository,
-)
-
-# 旧リポジトリ（互換性のため残存、移行後に削除）
-from src.infrastructure.repositories.postgres_screener_repository import (
-    PostgresScreenerRepository,
-)
-from src.infrastructure.repositories.postgres_stock_repository import (
-    PostgresStockRepository,
+from src.infrastructure.repositories.postgres_watchlist_repository import (
+    PostgresWatchlistRepository,
 )
 
 __all__ = [
-    # 正規化構造（5リポジトリ）
-    "PostgresStockIdentityRepository",
-    "PostgresPriceSnapshotRepository",
-    "PostgresStockMetricsRepository",
-    "PostgresBenchmarkRepository",
-    "PostgresStockQueryRepository",
-    # その他
-    "PostgresMarketRepository",
-    # 旧リポジトリ（互換性のため）
-    "PostgresStockRepository",
-    "PostgresScreenerRepository",
+    "PostgresCANSLIMStockRepository",
+    "PostgresMarketSnapshotRepository",
+    "PostgresRefreshJobRepository",
+    "PostgresTradeRepository",
+    "PostgresWatchlistRepository",
+    "RefreshJob",
+    "RefreshJobRepository",
 ]

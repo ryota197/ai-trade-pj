@@ -3,80 +3,53 @@
 from datetime import datetime
 
 from src.application.dto.market_dto import MarketIndicatorsOutput, MarketStatusOutput
-from src.domain.repositories.market_data_repository import MarketDataRepository
-from src.domain.services.market_analyzer import MarketAnalyzer
-from src.domain.models import (
-    MarketIndicators,
-    MovingAverageIndicator,
-    PutCallRatioIndicator,
-    RsiIndicator,
-    VixIndicator,
-)
+from src.domain.models.market_snapshot import MarketSnapshot
+from src.domain.repositories.market_snapshot_repository import MarketSnapshotRepository
 
 
 class GetMarketStatusUseCase:
     """
     マーケット状態取得ユースケース
 
-    市場データを取得し、Risk On/Off/Neutral を判定して返す。
+    保存済みのマーケットスナップショットから状態を取得する。
     """
 
-    def __init__(
-        self,
-        market_data_repo: MarketDataRepository,
-        market_analyzer: MarketAnalyzer,
-    ) -> None:
-        self._market_data_repo = market_data_repo
-        self._market_analyzer = market_analyzer
+    def __init__(self, market_snapshot_repo: MarketSnapshotRepository) -> None:
+        self._market_snapshot_repo = market_snapshot_repo
 
-    def execute(self) -> MarketStatusOutput:
+    def execute(self) -> MarketStatusOutput | None:
         """
-        マーケット状態を取得・分析
+        最新のマーケット状態を取得
 
         Returns:
-            MarketStatusOutput: マーケット状態の出力DTO
+            MarketStatusOutput | None: マーケット状態の出力DTO、データがない場合はNone
         """
-        # 市場データを取得
-        vix = self._market_data_repo.get_vix()
-        sp500_price = self._market_data_repo.get_sp500_price()
-        sp500_rsi = self._market_data_repo.get_sp500_rsi()
-        sp500_ma200 = self._market_data_repo.get_sp500_ma200()
-        put_call_ratio = self._market_data_repo.get_put_call_ratio()
+        snapshot = self._market_snapshot_repo.find_latest()
 
-        # ドメイン Value Object を構築
-        indicators = MarketIndicators(
-            vix=VixIndicator(value=vix),
-            sp500_rsi=RsiIndicator(value=sp500_rsi),
-            sp500_ma=MovingAverageIndicator(
-                current_price=sp500_price,
-                ma_200=sp500_ma200,
-            ),
-            put_call_ratio=PutCallRatioIndicator(value=put_call_ratio),
-        )
+        if snapshot is None:
+            return None
 
-        # ドメインサービスで分析
-        market_status = self._market_analyzer.analyze(indicators)
+        return self._to_output(snapshot)
 
-        # 出力DTOに変換
+    def _to_output(self, snapshot: MarketSnapshot) -> MarketStatusOutput:
+        """スナップショットを出力DTOに変換"""
         indicators_output = MarketIndicatorsOutput(
-            vix=vix,
-            vix_signal=indicators.vix.signal.value,
-            sp500_price=sp500_price,
-            sp500_rsi=sp500_rsi,
-            sp500_rsi_signal=indicators.sp500_rsi.signal.value,
-            sp500_ma200=sp500_ma200,
-            sp500_above_ma200=indicators.sp500_ma.is_above_ma,
-            put_call_ratio=put_call_ratio,
-            put_call_signal=indicators.put_call_ratio.signal.value,
-            retrieved_at=datetime.now(),
+            vix=snapshot.vix,
+            vix_signal=snapshot.vix_signal().value,
+            sp500_price=snapshot.sp500_price,
+            sp500_rsi=snapshot.sp500_rsi,
+            sp500_rsi_signal=snapshot.rsi_signal().value,
+            sp500_ma200=snapshot.sp500_ma200,
+            sp500_above_ma200=snapshot.is_above_ma200(),
+            put_call_ratio=snapshot.put_call_ratio,
+            put_call_signal=snapshot.put_call_signal().value,
+            retrieved_at=snapshot.recorded_at,
         )
 
         return MarketStatusOutput(
-            condition=market_status.condition,
-            condition_label=market_status.condition.value,
-            confidence=market_status.confidence,
-            score=market_status.score,
-            recommendation=market_status.recommendation,
+            condition=snapshot.condition,
+            condition_label=snapshot.condition.value,
+            score=snapshot.score,
             indicators=indicators_output,
-            analyzed_at=market_status.analyzed_at,
+            recorded_at=snapshot.recorded_at,
         )

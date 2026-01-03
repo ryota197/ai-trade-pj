@@ -2,22 +2,23 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
-from src.domain.models import MarketCondition
+from src.domain.models.market_snapshot import MarketCondition
 
 
 @dataclass(frozen=True)
 class MarketIndicatorsOutput:
     """マーケット指標 出力DTO"""
 
-    vix: float
+    vix: Decimal
     vix_signal: str
-    sp500_price: float
-    sp500_rsi: float
+    sp500_price: Decimal
+    sp500_rsi: Decimal
     sp500_rsi_signal: str
-    sp500_ma200: float
+    sp500_ma200: Decimal
     sp500_above_ma200: bool
-    put_call_ratio: float
+    put_call_ratio: Decimal
     put_call_signal: str
     retrieved_at: datetime
 
@@ -28,13 +29,11 @@ class MarketStatusOutput:
 
     condition: MarketCondition
     condition_label: str
-    confidence: float
     score: int
-    recommendation: str
     indicators: MarketIndicatorsOutput
-    analyzed_at: datetime
+    recorded_at: datetime
 
     @property
     def is_favorable(self) -> bool:
         """エントリーに適した環境か"""
-        return self.condition == MarketCondition.RISK_ON and self.confidence >= 0.6
+        return self.condition == MarketCondition.RISK_ON and self.score >= 2

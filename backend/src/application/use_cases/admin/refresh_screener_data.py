@@ -1,7 +1,7 @@
 """スクリーニングデータ更新 ユースケース"""
 
-import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from src.application.dto.admin_dto import (
     RefreshJobError,
@@ -12,11 +12,13 @@ from src.application.dto.admin_dto import (
     RefreshJobTiming,
 )
 from src.application.interfaces.financial_data_gateway import FinancialDataGateway
-from src.domain.entities.stock import Stock
-from src.domain.repositories.refresh_job_repository import RefreshJob, RefreshJobRepository
-from src.domain.repositories.stock_repository import StockRepository
-from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
-from src.domain.models import CANSLIMScore
+from src.domain.models.canslim_stock import CANSLIMStock
+from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
+from src.domain.services.rs_calculator import PriceBar, RSCalculator
+from src.infrastructure.repositories.postgres_refresh_job_repository import (
+    RefreshJob,
+    RefreshJobRepository,
+)
 
 
 class RefreshScreenerDataUseCase:
@@ -30,14 +32,14 @@ class RefreshScreenerDataUseCase:
     def __init__(
         self,
         job_repository: RefreshJobRepository,
-        stock_repository: StockRepository,
+        stock_repository: CANSLIMStockRepository,
         financial_gateway: FinancialDataGateway,
-        rs_calculator: RelativeStrengthCalculator,
+        rs_calculator: RSCalculator | None = None,
     ) -> None:
         self._job_repo = job_repository
         self._stock_repo = stock_repository
         self._financial_gateway = financial_gateway
-        self._rs_calculator = rs_calculator
+        self._rs_calculator = rs_calculator or RSCalculator()
 
     async def start_refresh(self, input_: RefreshJobInput) -> RefreshJobOutput:
         """
@@ -76,14 +78,23 @@ class RefreshScreenerDataUseCase:
             started_at=None,
         )
 
-    async def execute_refresh(self, job_id: str, symbols: list[str]) -> None:
+    async def execute_refresh(
+        self,
+        job_id: str,
+        symbols: list[str],
+        target_date: date | None = None,
+    ) -> None:
         """
         データ更新を実行（バックグラウンドタスク用）
 
         Args:
             job_id: ジョブID
             symbols: 更新する銘柄リスト
+            target_date: 対象日（デフォルトは今日）
         """
+        if target_date is None:
+            target_date = date.today()
+
         # ジョブを取得して実行中に更新
         job = await self._job_repo.get_by_id(job_id)
         if job is None:
@@ -105,12 +116,13 @@ class RefreshScreenerDataUseCase:
         )
         await self._job_repo.update(job)
 
-        # S&P500の履歴を取得（RS Rating計算用）
+        # S&P500の履歴を取得（RS計算用）
+        benchmark_bars: list[PriceBar] = []
         try:
-            sp500_bars = await self._financial_gateway.get_sp500_history(period="1y")
-            sp500_prices = [bar.close for bar in sp500_bars]
+            sp500_history = await self._financial_gateway.get_sp500_history(period="1y")
+            benchmark_bars = [PriceBar(close=bar.close) for bar in sp500_history]
         except Exception:
-            sp500_prices = []
+            pass
 
         errors: list[dict] = []
         succeeded = 0
@@ -118,7 +130,7 @@ class RefreshScreenerDataUseCase:
 
         for i, symbol in enumerate(symbols):
             try:
-                await self._process_single_symbol(symbol, sp500_prices)
+                await self._process_single_symbol(symbol, target_date, benchmark_bars)
                 succeeded += 1
             except Exception as e:
                 failed += 1
@@ -143,11 +155,10 @@ class RefreshScreenerDataUseCase:
 
         # 完了
         completed_at = datetime.now(timezone.utc)
-        final_status = "completed" if failed == 0 else "completed"  # エラーがあっても完了扱い
 
         job = RefreshJob(
             job_id=job.job_id,
-            status=final_status,
+            status="completed",
             source=job.source,
             total_symbols=job.total_symbols,
             processed_count=len(symbols),
@@ -161,9 +172,12 @@ class RefreshScreenerDataUseCase:
         await self._job_repo.update(job)
 
     async def _process_single_symbol(
-        self, symbol: str, sp500_prices: list[float]
+        self,
+        symbol: str,
+        target_date: date,
+        benchmark_bars: list[PriceBar],
     ) -> None:
-        """単一銘柄のデータを処理"""
+        """単一銘柄のデータを処理（Job 1: 価格データ取得）"""
         # 株価データ取得
         quote = await self._financial_gateway.get_quote(symbol)
         if quote is None:
@@ -172,56 +186,57 @@ class RefreshScreenerDataUseCase:
         # 財務データ取得
         financials = await self._financial_gateway.get_financial_metrics(symbol)
 
-        # 株価履歴取得（RS Rating計算用）
-        history = await self._financial_gateway.get_price_history(symbol, period="1y")
-        stock_prices = [bar.close for bar in history]
-
-        # RS Rating計算
-        rs_rating = 50  # デフォルト
-        if sp500_prices and stock_prices:
-            _, rs_rating = self._rs_calculator.calculate_from_prices(
-                stock_prices=stock_prices,
-                benchmark_prices=sp500_prices,
+        # 株価履歴取得（RS計算用）
+        stock_bars: list[PriceBar] = []
+        try:
+            history = await self._financial_gateway.get_price_history(
+                symbol, period="1y"
             )
+            stock_bars = [PriceBar(close=bar.close) for bar in history]
+        except Exception:
+            pass
 
-        # CAN-SLIMスコア計算
-        volume_ratio = quote.volume / quote.avg_volume if quote.avg_volume > 0 else 0
-        distance_from_high = (
-            ((quote.week_52_high - quote.price) / quote.week_52_high) * 100
-            if quote.week_52_high > 0
-            else 0
-        )
+        # 相対強度を計算
+        relative_strength: Decimal | None = None
+        if stock_bars and benchmark_bars:
+            relative_strength = self._rs_calculator.calculate(stock_bars, benchmark_bars)
 
-        canslim_score = CANSLIMScore.calculate(
-            eps_growth_quarterly=financials.eps_growth_quarterly if financials else None,
-            eps_growth_annual=financials.eps_growth_annual if financials else None,
-            distance_from_52w_high=distance_from_high,
-            volume_ratio=volume_ratio,
-            rs_rating=rs_rating,
-            institutional_ownership=financials.institutional_ownership if financials else None,
-        )
-
-        # Stockエンティティを構築して保存
-        stock = Stock(
-            symbol=symbol,
-            name=symbol,  # 名前は別途取得が必要
-            price=quote.price,
-            change_percent=quote.change_percent,
+        # CANSLIMStockを構築して保存
+        stock = CANSLIMStock(
+            symbol=symbol.upper(),
+            date=target_date,
+            name=symbol,  # TODO: 名前取得
+            industry=None,
+            price=Decimal(str(quote.price)),
+            change_percent=Decimal(str(quote.change_percent)),
             volume=quote.volume,
-            avg_volume=quote.avg_volume,
+            avg_volume_50d=quote.avg_volume,
             market_cap=quote.market_cap,
-            pe_ratio=quote.pe_ratio,
-            week_52_high=quote.week_52_high,
-            week_52_low=quote.week_52_low,
-            eps_growth_quarterly=financials.eps_growth_quarterly if financials else None,
-            eps_growth_annual=financials.eps_growth_annual if financials else None,
-            rs_rating=rs_rating,
-            institutional_ownership=financials.institutional_ownership if financials else None,
-            canslim_score=canslim_score,
+            week_52_high=Decimal(str(quote.week_52_high)) if quote.week_52_high else None,
+            week_52_low=Decimal(str(quote.week_52_low)) if quote.week_52_low else None,
+            eps_growth_quarterly=(
+                Decimal(str(financials.eps_growth_quarterly))
+                if financials and financials.eps_growth_quarterly
+                else None
+            ),
+            eps_growth_annual=(
+                Decimal(str(financials.eps_growth_annual))
+                if financials and financials.eps_growth_annual
+                else None
+            ),
+            institutional_ownership=(
+                Decimal(str(financials.institutional_ownership))
+                if financials and financials.institutional_ownership
+                else None
+            ),
+            relative_strength=relative_strength,
+            # RS Rating と CAN-SLIM スコアは Job 2, Job 3 で計算
+            rs_rating=None,
+            canslim_score=None,
             updated_at=datetime.now(timezone.utc),
         )
 
-        await self._stock_repo.save(stock)
+        self._stock_repo.save(stock)
 
     async def get_job_status(self, job_id: str) -> RefreshJobStatusOutput | None:
         """
@@ -243,7 +258,6 @@ class RefreshScreenerDataUseCase:
         estimated_remaining = None
 
         if job.started_at:
-            # started_atがnaiveな場合はUTCとして扱う
             started = job.started_at
             if started.tzinfo is None:
                 started = started.replace(tzinfo=timezone.utc)
@@ -271,7 +285,9 @@ class RefreshScreenerDataUseCase:
         timing = RefreshJobTiming(
             started_at=job.started_at,
             elapsed_seconds=round(elapsed_seconds, 1),
-            estimated_remaining_seconds=round(estimated_remaining, 1) if estimated_remaining else None,
+            estimated_remaining_seconds=(
+                round(estimated_remaining, 1) if estimated_remaining else None
+            ),
         )
 
         errors = []

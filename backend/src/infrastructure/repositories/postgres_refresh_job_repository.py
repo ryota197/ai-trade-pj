@@ -1,13 +1,55 @@
 """リフレッシュジョブ PostgreSQLリポジトリ実装"""
 
 import json
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.domain.repositories.refresh_job_repository import RefreshJob, RefreshJobRepository
 from src.infrastructure.database.models.refresh_job_model import RefreshJobModel
+
+
+@dataclass
+class RefreshJob:
+    """リフレッシュジョブ（エンティティ）"""
+
+    job_id: str
+    status: str  # pending, running, completed, failed
+    source: str
+    total_symbols: int = 0
+    processed_count: int = 0
+    succeeded_count: int = 0
+    failed_count: int = 0
+    errors: list[str] | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class RefreshJobRepository(ABC):
+    """リフレッシュジョブリポジトリインターフェース"""
+
+    @abstractmethod
+    async def create(self, job: RefreshJob) -> RefreshJob:
+        """ジョブを作成"""
+        pass
+
+    @abstractmethod
+    async def get_by_id(self, job_id: str) -> RefreshJob | None:
+        """ジョブIDで取得"""
+        pass
+
+    @abstractmethod
+    async def update(self, job: RefreshJob) -> RefreshJob:
+        """ジョブを更新"""
+        pass
+
+    @abstractmethod
+    async def get_latest(self, limit: int = 10) -> list[RefreshJob]:
+        """最新のジョブを取得"""
+        pass
 
 
 class PostgresRefreshJobRepository(RefreshJobRepository):
