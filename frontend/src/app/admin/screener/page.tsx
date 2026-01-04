@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Shield } from "lucide-react";
 
 import { RefreshPanel } from "./_components/RefreshPanel";
+import { FlowHistory } from "./_components/FlowHistory";
 
 /**
  * 管理画面 - スクリーナーデータ更新ページ
@@ -31,6 +32,11 @@ export default function AdminScreenerPage() {
 
         {/* 更新パネル */}
         <RefreshPanel />
+
+        {/* 実行履歴 */}
+        <div className="mt-6">
+          <FlowHistory />
+        </div>
 
         {/* 注意事項 */}
         <div className="mt-8 p-4 bg-muted/50 rounded-lg">
