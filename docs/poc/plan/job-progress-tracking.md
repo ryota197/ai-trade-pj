@@ -376,11 +376,11 @@ src/infrastructure/
 │   ├── migrations/
 │   │   └── 20260104_add_flow_executions.sql  # [実装済み]
 │   └── models/
-│       ├── flow_execution_model.py  # SQLAlchemy ORM（未実装）
-│       └── job_execution_model.py   # SQLAlchemy ORM（未実装）
+│       ├── flow_execution_model.py  # SQLAlchemy ORM [実装済み]
+│       └── job_execution_model.py   # SQLAlchemy ORM [実装済み]
 └── repositories/
-    ├── postgres_flow_execution_repository.py   # 未実装
-    └── postgres_job_execution_repository.py    # 未実装
+    ├── postgres_flow_execution_repository.py   # [実装済み]
+    └── postgres_job_execution_repository.py    # [実装済み]
 ```
 
 ### 2. エンティティ定義
@@ -596,10 +596,10 @@ def get_refresh_screener_flow(
 3. [x] `src/jobs/lib/repositories.py` 作成
    - FlowExecutionRepository, JobExecutionRepository インターフェース
 4. [x] `src/jobs/lib/__init__.py` 更新（エクスポート追加）
-5. [ ] `src/infrastructure/database/models/flow_execution_model.py` 作成
-6. [ ] `src/infrastructure/database/models/job_execution_model.py` 作成
-7. [ ] `src/infrastructure/repositories/postgres_flow_execution_repository.py` 作成
-8. [ ] `src/infrastructure/repositories/postgres_job_execution_repository.py` 作成
+5. [x] `src/infrastructure/database/models/flow_execution_model.py` 作成
+6. [x] `src/infrastructure/database/models/job_execution_model.py` 作成
+7. [x] `src/infrastructure/repositories/postgres_flow_execution_repository.py` 作成
+8. [x] `src/infrastructure/repositories/postgres_job_execution_repository.py` 作成
 9. [ ] RefreshScreenerFlow の修正
 10. [ ] dependencies.py の修正
 11. [ ] admin_controller の修正（GET /status レスポンス変更）
