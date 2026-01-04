@@ -358,31 +358,34 @@ CREATE INDEX idx_flow_executions_status ON flow_executions(status, created_at DE
 
 ```
 src/jobs/
-├── lib/                             # 共通基盤
+├── lib/                             # フロー・ジョブ実行管理
 │   ├── __init__.py
-│   ├── base.py                      # Job, JobResult（既存）
-│   ├── state.py                     # JobState（既存）
-│   ├── errors.py                    # JobError, JobExecutionError（既存）
-│   └── executions.py                # FlowExecution, JobExecution（新規）
+│   ├── models.py                    # FlowExecution, JobExecution [実装済み]
+│   └── repositories.py              # リポジトリインターフェース [実装済み]
 ├── flows/
 │   └── refresh_screener.py
 └── executions/
+    ├── base.py                      # Job 基底クラス [実装済み]
     ├── collect_stock_data.py
     ├── calculate_rs_rating.py
     └── calculate_canslim.py
 
 src/infrastructure/
-├── database/models/
-│   ├── flow_execution_model.py      # SQLAlchemy ORM（新規）
-│   └── job_execution_model.py       # SQLAlchemy ORM（新規）
+├── database/
+│   ├── init.sql                     # テーブル定義 [実装済み]
+│   ├── migrations/
+│   │   └── 20260104_add_flow_executions.sql  # [実装済み]
+│   └── models/
+│       ├── flow_execution_model.py  # SQLAlchemy ORM（未実装）
+│       └── job_execution_model.py   # SQLAlchemy ORM（未実装）
 └── repositories/
-    ├── postgres_flow_execution_repository.py   # 新規
-    └── postgres_job_execution_repository.py    # 新規
+    ├── postgres_flow_execution_repository.py   # 未実装
+    └── postgres_job_execution_repository.py    # 未実装
 ```
 
 ### 2. エンティティ定義
 
-`src/jobs/lib/executions.py`:
+`src/jobs/lib/models.py`:
 
 ```python
 @dataclass
@@ -413,7 +416,7 @@ class JobExecution:
 
 ### 3. リポジトリインターフェース
 
-`src/jobs/lib/executions.py` に追加:
+`src/jobs/lib/repositories.py`:
 
 ```python
 class FlowExecutionRepository(ABC):
@@ -585,17 +588,20 @@ def get_refresh_screener_flow(
 
 ### 7. 実装順序
 
-1. [ ] データベースマイグレーション（flow_executions作成、job_executions変更）
-2. [ ] `src/jobs/lib/executions.py` 作成
-   - FlowExecution, JobExecution エンティティ
+1. [x] データベースマイグレーション（flow_executions作成、job_executions変更）
+   - `init.sql` 更新済み
+   - `migrations/20260104_add_flow_executions.sql` 作成済み
+2. [x] `src/jobs/lib/models.py` 作成
+   - FlowStatus, JobStatus, FlowExecution, JobExecution
+3. [x] `src/jobs/lib/repositories.py` 作成
    - FlowExecutionRepository, JobExecutionRepository インターフェース
-3. [ ] `src/jobs/lib/__init__.py` 更新（エクスポート追加）
-4. [ ] `src/infrastructure/database/models/flow_execution_model.py` 作成
-5. [ ] `src/infrastructure/database/models/job_execution_model.py` 作成
-6. [ ] `src/infrastructure/repositories/postgres_flow_execution_repository.py` 作成
-7. [ ] `src/infrastructure/repositories/postgres_job_execution_repository.py` 作成
-8. [ ] RefreshScreenerFlow の修正
-9. [ ] dependencies.py の修正
-10. [ ] admin_controller の修正（GET /status レスポンス変更）
-11. [ ] 単体テスト
-12. [ ] 結合テスト
+4. [x] `src/jobs/lib/__init__.py` 更新（エクスポート追加）
+5. [ ] `src/infrastructure/database/models/flow_execution_model.py` 作成
+6. [ ] `src/infrastructure/database/models/job_execution_model.py` 作成
+7. [ ] `src/infrastructure/repositories/postgres_flow_execution_repository.py` 作成
+8. [ ] `src/infrastructure/repositories/postgres_job_execution_repository.py` 作成
+9. [ ] RefreshScreenerFlow の修正
+10. [ ] dependencies.py の修正
+11. [ ] admin_controller の修正（GET /status レスポンス変更）
+12. [ ] 単体テスト
+13. [ ] 結合テスト

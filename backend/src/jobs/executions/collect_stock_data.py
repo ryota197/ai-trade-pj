@@ -8,7 +8,7 @@ from src.application.interfaces.financial_data_gateway import FinancialDataGatew
 from src.domain.models.canslim_stock import CANSLIMStock
 from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
 from src.domain.services.rs_calculator import PriceBar, RSCalculator
-from src.jobs.lib.base import Job
+from src.jobs.executions.base import Job
 
 
 @dataclass

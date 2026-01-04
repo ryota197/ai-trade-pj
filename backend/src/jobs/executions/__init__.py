@@ -1,5 +1,6 @@
 """Job Executions - 個別ジョブ実装"""
 
+from src.jobs.executions.base import Job
 from src.jobs.executions.collect_stock_data import (
     CollectInput,
     CollectOutput,
@@ -17,6 +18,8 @@ from src.jobs.executions.calculate_canslim import (
 )
 
 __all__ = [
+    # Base
+    "Job",
     # Job 1: データ収集
     "CollectInput",
     "CollectOutput",

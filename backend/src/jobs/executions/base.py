@@ -1,20 +1,10 @@
 """ジョブ基底クラス"""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 TInput = TypeVar("TInput")
 TOutput = TypeVar("TOutput")
-
-
-@dataclass
-class JobResult:
-    """ジョブ実行結果"""
-
-    success: bool
-    message: str
-    data: dict | None = None
 
 
 class Job(ABC, Generic[TInput, TOutput]):

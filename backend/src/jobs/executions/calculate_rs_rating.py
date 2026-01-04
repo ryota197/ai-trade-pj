@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
 from src.domain.services.rs_rating_calculator import RSRatingCalculator
-from src.jobs.lib.base import Job
+from src.jobs.executions.base import Job
 
 
 @dataclass

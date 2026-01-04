@@ -8,7 +8,7 @@ from src.domain.models.market_snapshot import MarketCondition
 from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
 from src.domain.repositories.market_snapshot_repository import MarketSnapshotRepository
 from src.domain.services.canslim_scorer import CANSLIMScorer
-from src.jobs.lib.base import Job
+from src.jobs.executions.base import Job
 
 
 @dataclass
