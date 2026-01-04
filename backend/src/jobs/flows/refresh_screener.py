@@ -1,7 +1,8 @@
 """スクリーナーデータ更新フロー"""
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from src.jobs.executions.collect_stock_data import (
@@ -16,6 +17,12 @@ from src.jobs.executions.calculate_canslim import (
     CalculateCANSLIMInput,
     CalculateCANSLIMJob,
 )
+from src.jobs.lib import (
+    FlowExecution,
+    JobExecution,
+    FlowExecutionRepository,
+    JobExecutionRepository,
+)
 
 
 @dataclass
@@ -27,39 +34,22 @@ class RefreshScreenerInput:
 
 
 @dataclass
-class FlowStepResult:
-    """フローステップ結果"""
-
-    job_name: str
-    success: bool
-    message: str
-    data: dict | None = None
-
-
-@dataclass
 class FlowResult:
     """フロー実行結果"""
 
-    job_id: str
+    flow_id: str
     success: bool
     started_at: datetime
     completed_at: datetime
     duration_seconds: float
-    steps: list[FlowStepResult] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
-        """辞書に変換（job_executions.result用）"""
-        return {
-            "steps": [
-                {
-                    "job_name": step.job_name,
-                    "success": step.success,
-                    "message": step.message,
-                    "data": step.data,
-                }
-                for step in self.steps
-            ],
-        }
+
+# ジョブ定義（順序付き）
+JOB_DEFINITIONS = [
+    "collect_stock_data",
+    "calculate_rs_rating",
+    "calculate_canslim",
+]
 
 
 class RefreshScreenerFlow:
@@ -70,7 +60,13 @@ class RefreshScreenerFlow:
       1. collect_stock_data    - 外部APIからデータ収集
       2. calculate_rs_rating   - RS Ratingパーセンタイル計算
       3. calculate_canslim     - CAN-SLIMスコア計算
+
+    進捗追跡:
+      - flow_executions テーブルでフロー全体の状態を管理
+      - job_executions テーブルで各ジョブの状態を管理
     """
+
+    FLOW_NAME = "refresh_screener"
 
     def __init__(
         self,
@@ -78,87 +74,133 @@ class RefreshScreenerFlow:
         rs_rating_job: CalculateRSRatingJob,
         canslim_job: CalculateCANSLIMJob,
         symbol_provider: "SymbolProvider",
+        flow_repository: FlowExecutionRepository,
+        job_repository: JobExecutionRepository,
     ) -> None:
         self.collect_job = collect_job
         self.rs_rating_job = rs_rating_job
         self.canslim_job = canslim_job
         self.symbol_provider = symbol_provider
+        self._flow_repo = flow_repository
+        self._job_repo = job_repository
 
     async def run(self, input_: RefreshScreenerInput) -> FlowResult:
         """フロー実行"""
-        job_id = str(uuid4())
-        started_at = datetime.now(timezone.utc)
-        steps: list[FlowStepResult] = []
-
-        # シンボルリスト取得
-        if input_.symbols:
-            symbols = input_.symbols
-        else:
-            symbols = await self.symbol_provider.get_symbols(input_.source)
-
-        # Step 1: データ収集
-        collect_result = await self.collect_job.execute(
-            CollectInput(symbols=symbols, source=input_.source)
+        # フロー開始を記録
+        flow = FlowExecution(
+            flow_id=str(uuid4()),
+            flow_name=self.FLOW_NAME,
+            total_jobs=len(JOB_DEFINITIONS),
         )
-        steps.append(
-            FlowStepResult(
-                job_name=self.collect_job.name,
-                success=True,
-                message=f"Collected {collect_result.succeeded}/{collect_result.processed} symbols",
-                data={
-                    "succeeded": collect_result.succeeded,
-                    "failed": collect_result.failed,
-                    "errors": collect_result.errors[:10],  # 最大10件のみ
-                },
+        flow.start(first_job=JOB_DEFINITIONS[0])
+        self._flow_repo.create(flow)
+
+        # 各ジョブのレコードを事前作成
+        jobs = self._create_job_records(flow.flow_id)
+
+        try:
+            # シンボルリスト取得
+            if input_.symbols:
+                symbols = input_.symbols
+            else:
+                symbols = await self.symbol_provider.get_symbols(input_.source)
+
+            # Job 1: データ収集
+            await self._execute_job(
+                job=jobs[0],
+                flow=flow,
+                next_job=JOB_DEFINITIONS[1],
+                execute_fn=lambda: self.collect_job.execute(
+                    CollectInput(symbols=symbols, source=input_.source)
+                ),
             )
-        )
 
-        # Step 2: RS Rating再計算
-        rs_result = await self.rs_rating_job.execute(
-            CalculateRSRatingInput(target_date=None)  # 当日
-        )
-        steps.append(
-            FlowStepResult(
-                job_name=self.rs_rating_job.name,
-                success=True,
-                message=f"Updated RS Rating for {rs_result.updated_count}/{rs_result.total_stocks} stocks",
-                data={
-                    "total_stocks": rs_result.total_stocks,
-                    "updated_count": rs_result.updated_count,
-                    "errors": rs_result.errors[:10],
-                },
+            # Job 2: RS Rating再計算
+            await self._execute_job(
+                job=jobs[1],
+                flow=flow,
+                next_job=JOB_DEFINITIONS[2],
+                execute_fn=lambda: self.rs_rating_job.execute(
+                    CalculateRSRatingInput(target_date=None)
+                ),
             )
-        )
 
-        # Step 3: CAN-SLIMスコア再計算
-        canslim_result = await self.canslim_job.execute(
-            CalculateCANSLIMInput(target_date=None)  # 当日
-        )
-        steps.append(
-            FlowStepResult(
-                job_name=self.canslim_job.name,
-                success=True,
-                message=f"Updated CAN-SLIM score for {canslim_result.updated_count}/{canslim_result.total_stocks} stocks",
-                data={
-                    "total_stocks": canslim_result.total_stocks,
-                    "updated_count": canslim_result.updated_count,
-                    "market_condition": canslim_result.market_condition.value,
-                    "errors": canslim_result.errors[:10],
-                },
+            # Job 3: CAN-SLIMスコア再計算
+            await self._execute_job(
+                job=jobs[2],
+                flow=flow,
+                next_job=None,
+                execute_fn=lambda: self.canslim_job.execute(
+                    CalculateCANSLIMInput(target_date=None)
+                ),
             )
-        )
 
-        completed_at = datetime.now(timezone.utc)
-        duration = (completed_at - started_at).total_seconds()
+            # フロー完了
+            flow.complete()
+            self._flow_repo.update(flow)
+
+        except Exception as e:
+            # フロー失敗を記録
+            flow.fail()
+            self._flow_repo.update(flow)
+            raise
 
         return FlowResult(
-            job_id=job_id,
+            flow_id=flow.flow_id,
             success=True,
-            started_at=started_at,
-            completed_at=completed_at,
-            duration_seconds=duration,
-            steps=steps,
+            started_at=flow.started_at,
+            completed_at=flow.completed_at,
+            duration_seconds=flow.duration_seconds or 0,
         )
+
+    def _create_job_records(self, flow_id: str) -> list[JobExecution]:
+        """ジョブレコードを事前作成"""
+        jobs = []
+        for job_name in JOB_DEFINITIONS:
+            job = JobExecution(
+                flow_id=flow_id,
+                job_name=job_name,
+            )
+            self._job_repo.create(job)
+            jobs.append(job)
+        return jobs
+
+    async def _execute_job(
+        self,
+        job: JobExecution,
+        flow: FlowExecution,
+        next_job: str | None,
+        execute_fn: Any,
+    ) -> None:
+        """単一ジョブを実行し、状態を更新"""
+        # ジョブ開始
+        job.start()
+        self._job_repo.update(job)
+
+        try:
+            # ジョブ実行
+            result = await execute_fn()
+
+            # ジョブ完了
+            job.complete(result=self._to_result_dict(result))
+            self._job_repo.update(job)
+
+            # フロー進捗更新
+            flow.advance(next_job=next_job)
+            self._flow_repo.update(flow)
+
+        except Exception as e:
+            # ジョブ失敗
+            job.fail(error_message=str(e))
+            self._job_repo.update(job)
+            raise
+
+    def _to_result_dict(self, result: Any) -> dict:
+        """結果をdict に変換"""
+        try:
+            return asdict(result)
+        except TypeError:
+            return {"raw": str(result)}
 
 
 class SymbolProvider:

@@ -600,7 +600,7 @@ def get_refresh_screener_flow(
 6. [x] `src/infrastructure/database/models/job_execution_model.py` 作成
 7. [x] `src/infrastructure/repositories/postgres_flow_execution_repository.py` 作成
 8. [x] `src/infrastructure/repositories/postgres_job_execution_repository.py` 作成
-9. [ ] RefreshScreenerFlow の修正
+9. [x] RefreshScreenerFlow の修正
 10. [ ] dependencies.py の修正
 11. [ ] admin_controller の修正（GET /status レスポンス変更）
 12. [ ] 単体テスト
