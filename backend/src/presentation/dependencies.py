@@ -38,6 +38,12 @@ from src.infrastructure.repositories.postgres_screener_repository import (
 from src.infrastructure.repositories.postgres_canslim_stock_repository import (
     PostgresCANSLIMStockRepository,
 )
+from src.infrastructure.repositories.postgres_flow_execution_repository import (
+    PostgresFlowExecutionRepository,
+)
+from src.infrastructure.repositories.postgres_job_execution_repository import (
+    PostgresJobExecutionRepository,
+)
 from src.infrastructure.repositories.postgres_trade_repository import (
     PostgresTradeRepository,
 )
@@ -245,6 +251,8 @@ def get_refresh_screener_flow(
         RefreshScreenerFlow: スクリーナーデータ更新フロー
     """
     stock_repo = PostgresCANSLIMStockRepository(db)
+    flow_repo = PostgresFlowExecutionRepository(db)
+    job_repo = PostgresJobExecutionRepository(db)
     financial_gateway = YFinanceGateway()
     symbol_provider = StaticSymbolProvider()
 
@@ -270,4 +278,6 @@ def get_refresh_screener_flow(
         rs_rating_job=rs_rating_job,
         canslim_job=canslim_job,
         symbol_provider=symbol_provider,
+        flow_repository=flow_repo,
+        job_repository=job_repo,
     )
