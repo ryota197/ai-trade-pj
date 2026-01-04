@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Loader2, CheckCircle } from "lucide-react";
+import { Play, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,9 +10,10 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import type { SymbolSource } from "@/types/admin";
 import { useAdminRefresh } from "../_hooks/useAdminRefresh";
-
-type SymbolSource = "sp500" | "nasdaq100";
+import { useFlowHistory } from "../_hooks/useFlowHistory";
+import { FlowProgress } from "./FlowProgress";
 
 const SOURCE_OPTIONS: {
   value: SymbolSource;
@@ -32,15 +33,23 @@ const SOURCE_OPTIONS: {
 ];
 
 /**
- * スクリーニングデータ更新パネル（シンプル版）
+ * スクリーニングデータ更新パネル
  */
 export function RefreshPanel() {
   const [selectedSource, setSelectedSource] =
     useState<SymbolSource>("nasdaq100");
-  const { isLoading, error, lastJobId, startRefresh } = useAdminRefresh();
+  const { isLoading, error, startRefresh } = useAdminRefresh();
+  const { flows, refresh: refreshHistory, isLoading: isLoadingHistory } = useFlowHistory(1);
+  const latestFlow = flows[0] ?? null;
 
-  const handleStart = () => {
-    startRefresh(selectedSource);
+  const handleStart = async () => {
+    await startRefresh(selectedSource);
+    // 開始後に履歴を再取得
+    refreshHistory();
+  };
+
+  const handleRefreshStatus = () => {
+    refreshHistory();
   };
 
   return (
@@ -78,14 +87,30 @@ export function RefreshPanel() {
         </div>
 
         {/* アクションボタン */}
-        <Button onClick={handleStart} disabled={isLoading} className="gap-2">
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Play className="h-4 w-4" />
+        <div className="flex items-center gap-3">
+          <Button onClick={handleStart} disabled={isLoading} className="gap-2">
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            {isLoading ? "開始中..." : "更新開始"}
+          </Button>
+          {latestFlow && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshStatus}
+              disabled={isLoadingHistory}
+              className="gap-2"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isLoadingHistory ? "animate-spin" : ""}`}
+              />
+              状態更新
+            </Button>
           )}
-          {isLoading ? "開始中..." : "更新開始"}
-        </Button>
+        </div>
 
         {/* エラー表示 */}
         {error && (
@@ -94,22 +119,8 @@ export function RefreshPanel() {
           </div>
         )}
 
-        {/* 成功メッセージ */}
-        {lastJobId && !error && (
-          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-            <div>
-              <p className="font-medium text-green-800 dark:text-green-200">
-                更新処理を開始しました
-              </p>
-              <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                Job ID: <span className="font-mono">{lastJobId.slice(0, 8)}</span>
-                <br />
-                バックグラウンドで処理が実行されます。
-              </p>
-            </div>
-          </div>
-        )}
+        {/* 最新フローの進捗表示 */}
+        {latestFlow && <FlowProgress status={latestFlow} />}
       </CardContent>
     </Card>
   );
