@@ -3,28 +3,39 @@
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-from src.application.use_cases.admin.refresh_screener_data import (
-    RefreshScreenerDataUseCase,
+from src.infrastructure.database.connection import get_db
+from src.infrastructure.repositories.postgres_flow_execution_repository import (
+    PostgresFlowExecutionRepository,
+)
+from src.infrastructure.repositories.postgres_job_execution_repository import (
+    PostgresJobExecutionRepository,
 )
 from src.jobs.flows.refresh_screener import RefreshScreenerFlow, RefreshScreenerInput
-from src.presentation.dependencies import (
-    get_refresh_screener_flow,
-    get_refresh_screener_use_case,
-)
+from src.jobs.lib import FlowExecutionRepository, JobExecutionRepository
+from src.presentation.dependencies import get_refresh_screener_flow
 from src.presentation.schemas.admin import (
     CancelJobResponse,
-    RefreshJobErrorSchema,
-    RefreshJobProgressSchema,
+    FlowStatusResponse,
+    JobExecutionSchema,
     RefreshJobRequest,
     RefreshJobResponse,
-    RefreshJobStatusResponse,
-    RefreshJobTimingSchema,
 )
 from src.presentation.schemas.common import ApiResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+
+
+def get_flow_repository(db: Session = Depends(get_db)) -> FlowExecutionRepository:
+    """FlowExecutionRepository の依存性解決"""
+    return PostgresFlowExecutionRepository(db)
+
+
+def get_job_repository(db: Session = Depends(get_db)) -> JobExecutionRepository:
+    """JobExecutionRepository の依存性解決"""
+    return PostgresJobExecutionRepository(db)
 
 
 async def _run_refresh_flow(
@@ -41,12 +52,9 @@ async def _run_refresh_flow(
     try:
         result = await flow.run(input_)
         logger.info(
-            f"Refresh flow completed: job_id={result.job_id}, "
-            f"duration={result.duration_seconds:.1f}s, "
-            f"steps={len(result.steps)}"
+            f"Refresh flow completed: flow_id={result.flow_id}, "
+            f"duration={result.duration_seconds:.1f}s"
         )
-        for step in result.steps:
-            logger.info(f"  - {step.job_name}: {step.message}")
     except Exception as e:
         logger.error(f"Refresh flow failed: {e}", exc_info=True)
 
@@ -66,6 +74,7 @@ async def start_refresh(
     スクリーニングデータ更新を開始
 
     フローをバックグラウンドで実行し、即座にレスポンスを返す。
+    進捗は GET /screener/refresh/{flow_id}/status で取得可能。
     """
     try:
         # 入力を構築
@@ -74,22 +83,14 @@ async def start_refresh(
             symbols=request.symbols,
         )
 
-        # シンボル数を取得（レスポンス用）
-        if request.symbols:
-            total_symbols = len(request.symbols)
-        else:
-            symbols = await flow.symbol_provider.get_symbols(request.source)
-            total_symbols = len(symbols)
-
         # バックグラウンドタスクとして実行を登録
         background_tasks.add_task(_run_refresh_flow, flow, input_)
 
-        # レスポンス
+        # レスポンス（flow_id はバックグラウンドで生成されるため "pending"）
         response = RefreshJobResponse(
-            job_id="pending",  # フローはバックグラウンドで実行されるため仮ID
+            flow_id="pending",
             status="started",
-            total_symbols=total_symbols,
-            started_at=None,
+            message="Refresh flow started in background. Check latest flow status.",
         )
 
         return ApiResponse(success=True, data=response)
@@ -103,51 +104,54 @@ async def start_refresh(
 
 
 @router.get(
-    "/screener/refresh/{job_id}/status",
-    response_model=ApiResponse[RefreshJobStatusResponse],
-    summary="ジョブステータス取得",
-    description="指定したジョブの進捗状況を取得する",
+    "/screener/refresh/{flow_id}/status",
+    response_model=ApiResponse[FlowStatusResponse],
+    summary="フローステータス取得",
+    description="指定したフローの進捗状況を取得する",
 )
-async def get_job_status(
-    job_id: str,
-    use_case: RefreshScreenerDataUseCase = Depends(get_refresh_screener_use_case),
-) -> ApiResponse[RefreshJobStatusResponse]:
+async def get_flow_status(
+    flow_id: str,
+    flow_repo: FlowExecutionRepository = Depends(get_flow_repository),
+    job_repo: JobExecutionRepository = Depends(get_job_repository),
+) -> ApiResponse[FlowStatusResponse]:
     """
-    ジョブの進捗状況を取得
+    フローの進捗状況を取得
 
     Args:
-        job_id: ジョブID
+        flow_id: フローID
 
     Returns:
-        ジョブの進捗状況
+        フローの進捗状況と各ジョブの状態
     """
     try:
-        status = await use_case.get_job_status(job_id)
-        if status is None:
+        flow = flow_repo.get_by_id(flow_id)
+        if flow is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Job not found: {job_id}",
+                detail=f"Flow not found: {flow_id}",
             )
 
-        # DTOからスキーマに変換
-        response = RefreshJobStatusResponse(
-            job_id=status.job_id,
-            status=status.status,
-            progress=RefreshJobProgressSchema(
-                total=status.progress.total,
-                processed=status.progress.processed,
-                succeeded=status.progress.succeeded,
-                failed=status.progress.failed,
-                percentage=status.progress.percentage,
-            ),
-            timing=RefreshJobTimingSchema(
-                started_at=status.timing.started_at,
-                elapsed_seconds=status.timing.elapsed_seconds,
-                estimated_remaining_seconds=status.timing.estimated_remaining_seconds,
-            ),
-            errors=[
-                RefreshJobErrorSchema(symbol=e.symbol, error=e.error)
-                for e in status.errors
+        # ジョブ一覧を取得
+        jobs = job_repo.get_by_flow_id(flow_id)
+
+        response = FlowStatusResponse(
+            flow_id=flow.flow_id,
+            flow_name=flow.flow_name,
+            status=flow.status.value,
+            total_jobs=flow.total_jobs,
+            completed_jobs=flow.completed_jobs,
+            current_job=flow.current_job,
+            started_at=flow.started_at,
+            completed_at=flow.completed_at,
+            jobs=[
+                JobExecutionSchema(
+                    job_name=job.job_name,
+                    status=job.status.value,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at,
+                    error_message=job.error_message,
+                )
+                for job in jobs
             ],
         )
 
@@ -156,52 +160,89 @@ async def get_job_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get job status: {e}", exc_info=True)
+        logger.error(f"Failed to get flow status: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get job status: {e}",
+            detail=f"Failed to get flow status: {e}",
+        )
+
+
+@router.get(
+    "/screener/refresh/latest",
+    response_model=ApiResponse[list[FlowStatusResponse]],
+    summary="最新フロー一覧取得",
+    description="最新のフロー実行一覧を取得する",
+)
+async def get_latest_flows(
+    limit: int = 10,
+    flow_repo: FlowExecutionRepository = Depends(get_flow_repository),
+    job_repo: JobExecutionRepository = Depends(get_job_repository),
+) -> ApiResponse[list[FlowStatusResponse]]:
+    """
+    最新のフロー実行一覧を取得
+
+    Args:
+        limit: 取得件数（デフォルト10件）
+
+    Returns:
+        フロー実行一覧
+    """
+    try:
+        flows = flow_repo.get_latest(limit=limit)
+
+        responses = []
+        for flow in flows:
+            jobs = job_repo.get_by_flow_id(flow.flow_id)
+            responses.append(
+                FlowStatusResponse(
+                    flow_id=flow.flow_id,
+                    flow_name=flow.flow_name,
+                    status=flow.status.value,
+                    total_jobs=flow.total_jobs,
+                    completed_jobs=flow.completed_jobs,
+                    current_job=flow.current_job,
+                    started_at=flow.started_at,
+                    completed_at=flow.completed_at,
+                    jobs=[
+                        JobExecutionSchema(
+                            job_name=job.job_name,
+                            status=job.status.value,
+                            started_at=job.started_at,
+                            completed_at=job.completed_at,
+                            error_message=job.error_message,
+                        )
+                        for job in jobs
+                    ],
+                )
+            )
+
+        return ApiResponse(success=True, data=responses)
+
+    except Exception as e:
+        logger.error(f"Failed to get latest flows: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get latest flows: {e}",
         )
 
 
 @router.delete(
-    "/screener/refresh/{job_id}",
+    "/screener/refresh/{flow_id}",
     response_model=ApiResponse[CancelJobResponse],
-    summary="ジョブキャンセル",
-    description="実行中または保留中のジョブをキャンセルする",
+    summary="フローキャンセル",
+    description="実行中または保留中のフローをキャンセルする（未実装）",
 )
-async def cancel_job(
-    job_id: str,
-    use_case: RefreshScreenerDataUseCase = Depends(get_refresh_screener_use_case),
+async def cancel_flow(
+    flow_id: str,
 ) -> ApiResponse[CancelJobResponse]:
     """
-    ジョブをキャンセル
+    フローをキャンセル
 
-    Args:
-        job_id: ジョブID
-
-    Returns:
-        キャンセル結果
+    Note:
+        現在は未実装。バックグラウンドタスクのキャンセルは複雑なため、
+        Phase 2 以降で実装予定。
     """
-    try:
-        cancelled = await use_case.cancel_job(job_id)
-
-        if not cancelled:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Job cannot be cancelled: {job_id} (not found or already completed)",
-            )
-
-        response = CancelJobResponse(
-            message=f"Job {job_id} has been cancelled",
-        )
-
-        return ApiResponse(success=True, data=response)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to cancel job: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to cancel job: {e}",
-        )
+    raise HTTPException(
+        status_code=501,
+        detail="Flow cancellation is not implemented yet",
+    )

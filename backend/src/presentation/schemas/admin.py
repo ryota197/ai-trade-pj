@@ -21,45 +21,33 @@ class RefreshJobRequest(BaseModel):
 class RefreshJobResponse(BaseModel):
     """リフレッシュジョブ開始レスポンス"""
 
-    job_id: str = Field(..., description="ジョブID")
+    flow_id: str = Field(..., description="フローID")
     status: str = Field(..., description="ステータス")
-    total_symbols: int = Field(..., description="対象銘柄数")
+    message: str = Field(..., description="メッセージ")
+
+
+class JobExecutionSchema(BaseModel):
+    """ジョブ実行スキーマ"""
+
+    job_name: str = Field(..., description="ジョブ名")
+    status: str = Field(..., description="ステータス: pending, running, completed, failed, skipped")
     started_at: datetime | None = Field(None, description="開始日時")
+    completed_at: datetime | None = Field(None, description="完了日時")
+    error_message: str | None = Field(None, description="エラーメッセージ")
 
 
-class RefreshJobProgressSchema(BaseModel):
-    """進捗スキーマ"""
+class FlowStatusResponse(BaseModel):
+    """フローステータスレスポンス"""
 
-    total: int = Field(..., description="対象銘柄数")
-    processed: int = Field(..., description="処理済み銘柄数")
-    succeeded: int = Field(..., description="成功銘柄数")
-    failed: int = Field(..., description="失敗銘柄数")
-    percentage: float = Field(..., description="進捗率（%）")
-
-
-class RefreshJobTimingSchema(BaseModel):
-    """タイミングスキーマ"""
-
-    started_at: datetime | None = Field(None, description="開始日時")
-    elapsed_seconds: float = Field(..., description="経過時間（秒）")
-    estimated_remaining_seconds: float | None = Field(None, description="推定残り時間（秒）")
-
-
-class RefreshJobErrorSchema(BaseModel):
-    """エラースキーマ"""
-
-    symbol: str = Field(..., description="エラーが発生した銘柄")
-    error: str = Field(..., description="エラーメッセージ")
-
-
-class RefreshJobStatusResponse(BaseModel):
-    """リフレッシュジョブステータスレスポンス"""
-
-    job_id: str = Field(..., description="ジョブID")
+    flow_id: str = Field(..., description="フローID")
+    flow_name: str = Field(..., description="フロー名")
     status: str = Field(..., description="ステータス: pending, running, completed, failed, cancelled")
-    progress: RefreshJobProgressSchema = Field(..., description="進捗")
-    timing: RefreshJobTimingSchema = Field(..., description="タイミング")
-    errors: list[RefreshJobErrorSchema] = Field(default_factory=list, description="エラーリスト")
+    total_jobs: int = Field(..., description="総ジョブ数")
+    completed_jobs: int = Field(..., description="完了ジョブ数")
+    current_job: str | None = Field(None, description="現在実行中のジョブ名")
+    started_at: datetime | None = Field(None, description="開始日時")
+    completed_at: datetime | None = Field(None, description="完了日時")
+    jobs: list[JobExecutionSchema] = Field(default_factory=list, description="ジョブ一覧")
 
 
 class CancelJobResponse(BaseModel):
