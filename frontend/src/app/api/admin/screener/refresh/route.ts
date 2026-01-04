@@ -6,21 +6,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendPost } from "@/lib/backend-fetch";
 import type { ApiResponse } from "@/types/api";
-
-interface RefreshJobResponse {
-  job_id: string;
-  status: string;
-  total_symbols: number;
-  started_at: string | null;
-}
-
-interface RefreshJobRequest {
-  symbols: string[];
-  source?: string;
-}
+import type { RefreshResponse, RefreshRequest } from "@/types/admin";
 
 export async function POST(request: NextRequest) {
-  let body: RefreshJobRequest;
+  let body: RefreshRequest;
 
   try {
     body = await request.json();
@@ -35,7 +24,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await backendPost<ApiResponse<RefreshJobResponse>>(
+  const result = await backendPost<ApiResponse<RefreshResponse>>(
     "/admin/screener/refresh",
     body
   );

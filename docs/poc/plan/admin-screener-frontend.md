@@ -83,7 +83,6 @@ frontend/src/
 │       │   └── FlowHistory.tsx         # フロー履歴（新規）
 │       └── _hooks/
 │           ├── useAdminRefresh.ts      # 更新開始（修正）
-│           ├── useFlowStatus.ts        # 進捗ポーリング（新規）
 │           └── useFlowHistory.ts       # 履歴取得（新規）
 │
 └── types/
@@ -196,33 +195,9 @@ interface UseAdminRefreshReturn {
 
 **主な変更:**
 - `lastJobId` → `lastFlowId`
-- 戻り値として `flow_id` を返す（ポーリング開始のため）
+- 戻り値として `flow_id` を返す
 
-#### 4.2 `useFlowStatus.ts` (新規)
-
-```typescript
-interface UseFlowStatusReturn {
-  status: FlowStatusResponse | null;
-  isLoading: boolean;
-  error: string | null;
-  isPolling: boolean;
-  startPolling: () => void;
-  stopPolling: () => void;
-}
-
-export function useFlowStatus(flowId: string | null): UseFlowStatusReturn {
-  // flowId が設定されたら自動ポーリング開始
-  // 完了/失敗/キャンセル時に自動停止
-  // ポーリング間隔: 2秒
-}
-```
-
-**実装ポイント:**
-- `useEffect` + `setInterval` でポーリング
-- `status` が終了状態（completed, failed, cancelled）で自動停止
-- コンポーネントアンマウント時にクリーンアップ
-
-#### 4.3 `useFlowHistory.ts` (新規)
+#### 4.2 `useFlowHistory.ts` (新規)
 
 ```typescript
 interface UseFlowHistoryReturn {
@@ -245,22 +220,27 @@ export function useFlowHistory(limit?: number): UseFlowHistoryReturn {
 #### 5.1 `RefreshPanel.tsx` (拡張)
 
 **追加機能:**
-- 実行中フローの進捗表示
-- 直近フローの状態表示
+- 直近フローの状態表示（リロードで更新）
 
 ```tsx
 export function RefreshPanel() {
   const [selectedSource, setSelectedSource] = useState<SymbolSource>("nasdaq100");
-  const { isLoading, error, lastFlowId, startRefresh } = useAdminRefresh();
-  const { status, isPolling } = useFlowStatus(lastFlowId);
+  const { isLoading, error, startRefresh } = useAdminRefresh();
+  const { flows, refresh: refreshHistory } = useFlowHistory(1);
+  const latestFlow = flows[0] ?? null;
+
+  const handleStart = async () => {
+    await startRefresh(selectedSource);
+    refreshHistory(); // 履歴を再取得
+  };
 
   return (
     <Card>
       {/* ソース選択 */}
       {/* 開始ボタン */}
 
-      {/* 進捗表示（実行中の場合） */}
-      {status && <FlowProgress status={status} />}
+      {/* 最新フローの進捗表示 */}
+      {latestFlow && <FlowProgress status={latestFlow} />}
 
       {/* エラー表示 */}
     </Card>
@@ -442,13 +422,12 @@ export default function AdminScreenerPage() {
 | 2 | API Routes 修正（flow_id 対応） | P1 | 1 |
 | 3 | `latest/route.ts` 新規作成 | P1 | 1 |
 | 4 | `useAdminRefresh.ts` 修正 | P1 | 1,2 |
-| 5 | `useFlowStatus.ts` 新規作成 | P1 | 1 |
-| 6 | `useFlowHistory.ts` 新規作成 | P2 | 1,3 |
-| 7 | `FlowProgress.tsx` 新規作成 | P1 | 1,5 |
-| 8 | `JobStepList.tsx` 新規作成 | P1 | 1 |
-| 9 | `RefreshPanel.tsx` 拡張 | P1 | 4,5,7,8 |
-| 10 | `FlowHistory.tsx` 新規作成 | P2 | 6 |
-| 11 | `page.tsx` 更新 | P2 | 9,10 |
+| 5 | `useFlowHistory.ts` 新規作成 | P1 | 1,3 |
+| 6 | `JobStepList.tsx` 新規作成 | P1 | 1 |
+| 7 | `FlowProgress.tsx` 新規作成 | P1 | 1,6 |
+| 8 | `RefreshPanel.tsx` 拡張 | P1 | 4,5,7 |
+| 9 | `FlowHistory.tsx` 新規作成 | P2 | 5 |
+| 10 | `page.tsx` 更新 | P2 | 8,9 |
 
 ---
 
@@ -484,20 +463,17 @@ export default function AdminScreenerPage() {
 
 ## 技術的考慮事項
 
-### ポーリング
+### 進捗確認方式
 
-- **間隔**: 2秒（API負荷とリアルタイム性のバランス）
-- **自動停止**: 終了ステータス時
-- **エラーハンドリング**: 3回連続失敗でポーリング停止
+- **手動リロード**: ページリロードで最新状態を取得
+- **開始直後の再取得**: `startRefresh()` 完了後に `refreshHistory()` を呼び出し
 
 ### キャッシュ
 
 - フロー状態: `revalidate: 0`（常に最新）
-- 履歴: `revalidate: 30`（30秒キャッシュ可）
 
 ### エラー表示
 
-- ネットワークエラー: トースト通知
 - API エラー: インライン表示
 - ジョブエラー: ジョブリスト内に表示
 
@@ -505,7 +481,8 @@ export default function AdminScreenerPage() {
 
 ## 将来拡張
 
-- **WebSocket/SSE**: リアルタイム更新（ポーリング廃止）
+- **自動ポーリング**: 実行中フローの自動進捗更新
+- **WebSocket/SSE**: リアルタイム更新
 - **詳細ログ**: 各ジョブの詳細ログ表示
 - **リトライ機能**: 失敗したフローの再実行
 - **スケジュール設定**: 定期実行の設定 UI
