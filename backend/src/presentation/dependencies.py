@@ -21,8 +21,7 @@ from src.application.use_cases.screener.screen_canslim_stocks import (
     ScreenCANSLIMStocksUseCase,
 )
 from src.domain.services.market_analyzer import MarketAnalyzer
-from src.domain.services.performance_calculator import PerformanceCalculator
-from src.domain.services.relative_strength_calculator import RelativeStrengthCalculator
+from src.domain.services.rs_calculator import RSCalculator
 from src.infrastructure.database.connection import get_db
 from src.infrastructure.external.symbol_provider import StaticSymbolProvider
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
@@ -31,9 +30,6 @@ from src.infrastructure.gateways.yfinance_market_data_gateway import (
 )
 from src.infrastructure.repositories.postgres_refresh_job_repository import (
     PostgresRefreshJobRepository,
-)
-from src.infrastructure.repositories.postgres_screener_repository import (
-    PostgresScreenerRepository,
 )
 from src.infrastructure.repositories.postgres_canslim_stock_repository import (
     PostgresCANSLIMStockRepository,
@@ -96,14 +92,10 @@ def get_screen_canslim_use_case(
     Returns:
         ScreenCANSLIMStocksUseCase: CAN-SLIMスクリーニングユースケース
     """
-    stock_repo = PostgresScreenerRepository(db)
-    financial_gateway = YFinanceGateway()
-    rs_calculator = RelativeStrengthCalculator()
+    stock_repo = PostgresCANSLIMStockRepository(db)
 
     return ScreenCANSLIMStocksUseCase(
-        stock_repository=stock_repo,
-        financial_gateway=financial_gateway,
-        rs_calculator=rs_calculator,
+        canslim_stock_repository=stock_repo,
     )
 
 
@@ -119,9 +111,9 @@ def get_stock_detail_use_case(
     Returns:
         GetStockDetailUseCase: 銘柄詳細取得ユースケース
     """
-    stock_repo = PostgresScreenerRepository(db)
+    stock_repo = PostgresCANSLIMStockRepository(db)
 
-    return GetStockDetailUseCase(stock_repository=stock_repo)
+    return GetStockDetailUseCase(canslim_stock_repository=stock_repo)
 
 
 # ============================================================
@@ -197,11 +189,9 @@ def get_performance_use_case(
         GetPerformanceUseCase: パフォーマンス取得ユースケース
     """
     trade_repo = PostgresTradeRepository(db)
-    performance_calculator = PerformanceCalculator()
 
     return GetPerformanceUseCase(
         trade_repository=trade_repo,
-        performance_calculator=performance_calculator,
     )
 
 
@@ -226,9 +216,9 @@ def get_refresh_screener_use_case(
         Phase 2以降は get_refresh_screener_flow を使用してください。
     """
     job_repo = PostgresRefreshJobRepository(db)
-    stock_repo = PostgresScreenerRepository(db)
+    stock_repo = PostgresCANSLIMStockRepository(db)
     financial_gateway = YFinanceGateway()
-    rs_calculator = RelativeStrengthCalculator()
+    rs_calculator = RSCalculator()
 
     return RefreshScreenerDataUseCase(
         job_repository=job_repo,
