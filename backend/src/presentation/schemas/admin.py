@@ -13,8 +13,8 @@ class RefreshJobRequest(BaseModel):
         description="更新する銘柄シンボルのリスト（空の場合はsourceから取得）",
     )
     source: str = Field(
-        "nasdaq100",
-        description="データソース: sp500, nasdaq100（symbolsが空の場合に使用）",
+        "sp500",
+        description="データソース: sp500（symbolsが空の場合に使用）",
     )
 
 
