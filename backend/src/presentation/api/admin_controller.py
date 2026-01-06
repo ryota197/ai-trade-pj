@@ -12,7 +12,7 @@ from src.infrastructure.repositories.postgres_flow_execution_repository import (
 from src.infrastructure.repositories.postgres_job_execution_repository import (
     PostgresJobExecutionRepository,
 )
-from src.jobs.flows.refresh_screener import RefreshScreenerFlow, RefreshScreenerInput
+from src.jobs.flows.refresh_screener import RefreshScreenerFlow
 from src.jobs.lib import FlowExecutionRepository, JobExecutionRepository
 from src.presentation.dependencies import get_refresh_screener_flow
 from src.presentation.schemas.admin import (
@@ -38,10 +38,7 @@ def get_job_repository(db: Session = Depends(get_db)) -> JobExecutionRepository:
     return PostgresJobExecutionRepository(db)
 
 
-async def _run_refresh_flow(
-    flow: RefreshScreenerFlow,
-    input_: RefreshScreenerInput,
-) -> None:
+async def _run_refresh_flow(flow: RefreshScreenerFlow) -> None:
     """
     バックグラウンドでフローを実行
 
@@ -50,7 +47,7 @@ async def _run_refresh_flow(
         エラーはログに出力する。
     """
     try:
-        result = await flow.run(input_)
+        result = await flow.run()
         logger.info(
             f"Refresh flow completed: flow_id={result.flow_id}, "
             f"duration={result.duration_seconds:.1f}s"
@@ -63,10 +60,10 @@ async def _run_refresh_flow(
     "/screener/refresh",
     response_model=ApiResponse[RefreshJobResponse],
     summary="スクリーニングデータ更新開始",
-    description="指定した銘柄のスクリーニングデータを更新するジョブを開始する",
+    description="S&P 500銘柄のスクリーニングデータを更新するジョブを開始する",
 )
 async def start_refresh(
-    request: RefreshJobRequest,
+    _request: RefreshJobRequest,
     background_tasks: BackgroundTasks,
     flow: RefreshScreenerFlow = Depends(get_refresh_screener_flow),
 ) -> ApiResponse[RefreshJobResponse]:
@@ -75,16 +72,13 @@ async def start_refresh(
 
     フローをバックグラウンドで実行し、即座にレスポンスを返す。
     進捗は GET /screener/refresh/{flow_id}/status で取得可能。
+
+    Note:
+        PoC実装ではS&P 500固定で更新を行う。
     """
     try:
-        # 入力を構築
-        input_ = RefreshScreenerInput(
-            source=request.source,
-            symbols=request.symbols,
-        )
-
         # バックグラウンドタスクとして実行を登録
-        background_tasks.add_task(_run_refresh_flow, flow, input_)
+        background_tasks.add_task(_run_refresh_flow, flow)
 
         # レスポンス（flow_id はバックグラウンドで生成されるため "pending"）
         response = RefreshJobResponse(
@@ -233,7 +227,7 @@ async def get_latest_flows(
     description="実行中または保留中のフローをキャンセルする（未実装）",
 )
 async def cancel_flow(
-    flow_id: str,
+    _flow_id: str,
 ) -> ApiResponse[CancelJobResponse]:
     """
     フローをキャンセル

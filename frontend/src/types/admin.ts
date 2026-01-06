@@ -47,11 +47,3 @@ export interface RefreshResponse {
   message: string;
 }
 
-// シンボルソース（PoC実装ではS&P500のみ対応）
-export type SymbolSource = "sp500";
-
-// 更新開始リクエスト
-export interface RefreshRequest {
-  symbols?: string[];
-  source: SymbolSource;
-}

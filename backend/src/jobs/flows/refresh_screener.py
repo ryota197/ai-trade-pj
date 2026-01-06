@@ -1,6 +1,6 @@
 """スクリーナーデータ更新フロー"""
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -24,13 +24,8 @@ from src.jobs.lib import (
     JobExecutionRepository,
 )
 
-
-@dataclass
-class RefreshScreenerInput:
-    """フロー入力"""
-
-    source: str  # "sp500" | "nasdaq100"
-    symbols: list[str] = field(default_factory=list)
+# PoC実装での固定値
+DEFAULT_SOURCE = "sp500"
 
 
 @dataclass
@@ -84,8 +79,12 @@ class RefreshScreenerFlow:
         self._flow_repo = flow_repository
         self._job_repo = job_repository
 
-    async def run(self, input_: RefreshScreenerInput) -> FlowResult:
-        """フロー実行"""
+    async def run(self) -> FlowResult:
+        """
+        フロー実行
+
+        S&P 500銘柄のスクリーニングデータを更新する。
+        """
         # フロー開始を記録
         flow = FlowExecution(
             flow_id=str(uuid4()),
@@ -99,11 +98,8 @@ class RefreshScreenerFlow:
         jobs = self._create_job_records(flow.flow_id)
 
         try:
-            # シンボルリスト取得
-            if input_.symbols:
-                symbols = input_.symbols
-            else:
-                symbols = await self.symbol_provider.get_symbols(input_.source)
+            # S&P 500銘柄リストを取得
+            symbols = await self.symbol_provider.get_symbols(DEFAULT_SOURCE)
 
             # Job 1: データ収集
             await self._execute_job(
@@ -111,7 +107,7 @@ class RefreshScreenerFlow:
                 flow=flow,
                 next_job=JOB_DEFINITIONS[1],
                 execute_fn=lambda: self.collect_job.execute(
-                    CollectInput(symbols=symbols, source=input_.source)
+                    CollectInput(symbols=symbols, source=DEFAULT_SOURCE)
                 ),
             )
 

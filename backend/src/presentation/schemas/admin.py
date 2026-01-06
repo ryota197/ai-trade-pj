@@ -6,16 +6,9 @@ from pydantic import BaseModel, Field
 
 
 class RefreshJobRequest(BaseModel):
-    """リフレッシュジョブ開始リクエスト"""
+    """リフレッシュジョブ開始リクエスト（PoC実装では固定値を使用）"""
 
-    symbols: list[str] = Field(
-        default_factory=list,
-        description="更新する銘柄シンボルのリスト（空の場合はsourceから取得）",
-    )
-    source: str = Field(
-        "sp500",
-        description="データソース: sp500（symbolsが空の場合に使用）",
-    )
+    pass
 
 
 class RefreshJobResponse(BaseModel):

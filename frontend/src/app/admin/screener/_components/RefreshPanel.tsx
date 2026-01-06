@@ -22,7 +22,7 @@ export function RefreshPanel() {
   const latestFlow = flows[0] ?? null;
 
   const handleStart = async () => {
-    await startRefresh("sp500");
+    await startRefresh();
     // 開始後に履歴を再取得
     refreshHistory();
   };

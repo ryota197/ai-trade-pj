@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { SymbolSource, RefreshResponse } from "@/types/admin";
+import type { RefreshResponse } from "@/types/admin";
 import type { ApiResponse } from "@/types/api";
 
 interface UseAdminRefreshReturn {
@@ -12,7 +12,7 @@ interface UseAdminRefreshReturn {
   /** 最後に開始したフローID */
   lastFlowId: string | null;
   /** 更新開始 */
-  startRefresh: (source: SymbolSource) => Promise<string | null>;
+  startRefresh: () => Promise<string | null>;
 }
 
 /**
@@ -25,41 +25,36 @@ export function useAdminRefresh(): UseAdminRefreshReturn {
   const [error, setError] = useState<string | null>(null);
   const [lastFlowId, setLastFlowId] = useState<string | null>(null);
 
-  const startRefresh = useCallback(
-    async (source: SymbolSource): Promise<string | null> => {
-      setIsLoading(true);
-      setError(null);
-      setLastFlowId(null);
+  const startRefresh = useCallback(async (): Promise<string | null> => {
+    setIsLoading(true);
+    setError(null);
+    setLastFlowId(null);
 
-      try {
-        const res = await fetch("/api/admin/screener/refresh", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source }),
-        });
+    try {
+      const res = await fetch("/api/admin/screener/refresh", {
+        method: "POST",
+      });
 
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error?.message || "更新開始に失敗しました");
-        }
-
-        const data: ApiResponse<RefreshResponse> = await res.json();
-
-        if (!data.success || !data.data) {
-          throw new Error(data.error || "更新開始に失敗しました");
-        }
-
-        setLastFlowId(data.data.flow_id);
-        return data.data.flow_id;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "更新開始に失敗しました");
-        return null;
-      } finally {
-        setIsLoading(false);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error?.message || "更新開始に失敗しました");
       }
-    },
-    []
-  );
+
+      const data: ApiResponse<RefreshResponse> = await res.json();
+
+      if (!data.success || !data.data) {
+        throw new Error(data.error || "更新開始に失敗しました");
+      }
+
+      setLastFlowId(data.data.flow_id);
+      return data.data.flow_id;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "更新開始に失敗しました");
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return {
     isLoading,
