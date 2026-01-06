@@ -23,12 +23,6 @@ const conditionStyles: Record<
   neutral: { badge: "secondary", bg: "bg-yellow-500/10 border-yellow-500/20" },
 };
 
-const conditionLabels: Record<MarketCondition, string> = {
-  risk_on: "Risk On",
-  risk_off: "Risk Off",
-  neutral: "Neutral",
-};
-
 /**
  * マーケット状態表示コンポーネント
  */
@@ -48,7 +42,7 @@ export function MarketStatus({
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">Market Status</CardTitle>
           <Badge variant={style.badge} className="text-sm">
-            {conditionLabels[condition]}
+            {conditionLabel}
           </Badge>
         </div>
       </CardHeader>

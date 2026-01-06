@@ -1,6 +1,5 @@
 """ウォッチリスト管理 ユースケース"""
 
-from datetime import datetime
 
 from src.application.dto.portfolio_dto import (
     AddToWatchlistInput,

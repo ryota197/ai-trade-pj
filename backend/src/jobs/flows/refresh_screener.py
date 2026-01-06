@@ -135,7 +135,7 @@ class RefreshScreenerFlow:
             flow.complete()
             self._flow_repo.update(flow)
 
-        except Exception as e:
+        except Exception:
             # フロー失敗を記録
             flow.fail()
             self._flow_repo.update(flow)

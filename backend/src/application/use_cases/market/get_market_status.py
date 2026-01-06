@@ -1,6 +1,5 @@
 """マーケット状態取得ユースケース"""
 
-from datetime import datetime
 
 from src.application.dto.market_dto import MarketIndicatorsOutput, MarketStatusOutput
 from src.domain.models.market_snapshot import MarketSnapshot

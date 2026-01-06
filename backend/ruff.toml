@@ -1,0 +1,18 @@
+# Ruff configuration
+# https://docs.astral.sh/ruff/configuration/
+
+target-version = "py311"
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "E741",  # ambiguous variable name (l, I, O)
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports in __init__.py

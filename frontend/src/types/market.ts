@@ -34,4 +34,4 @@ export interface MarketStatusResponse {
 }
 
 /** マーケット指標レスポンス */
-export interface MarketIndicatorsResponse extends MarketIndicators {}
+export type MarketIndicatorsResponse = MarketIndicators;

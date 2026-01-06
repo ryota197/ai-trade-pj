@@ -1,13 +1,12 @@
 """パフォーマンス取得 ユースケース"""
 
-from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 
 from src.application.dto.portfolio_dto import (
     PerformanceOutput,
 )
-from src.domain.models.trade import Trade, TradeStatus
+from src.domain.models.trade import Trade
 from src.domain.repositories.trade_repository import TradeRepository
 
 
