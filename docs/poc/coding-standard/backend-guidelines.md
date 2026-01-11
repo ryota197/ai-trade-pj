@@ -3,7 +3,7 @@
 ## 概要
 
 Python 3.11 + FastAPI + SQLAlchemy を使用したバックエンド開発のコーディング規約。
-**クリーンアーキテクチャ**に基づいた設計を採用する。
+**シンプルな3層アーキテクチャ**を採用する。
 
 ---
 
@@ -11,7 +11,6 @@ Python 3.11 + FastAPI + SQLAlchemy を使用したバックエンド開発のコ
 
 ### ディレクトリ構成
 
-詳細なディレクトリ構成は [directory-structure.md](../architectures/directory-structure.md) を参照。
 アーキテクチャの詳細は [service-components.md](../architectures/service-components.md) を参照。
 
 ```
@@ -20,39 +19,38 @@ src/
 ├── config.py                # 設定管理
 │
 ├── domain/                  # ドメイン層（最内層）
-│   ├── entities/            # エンティティ
-│   ├── value_objects/       # 値オブジェクト
+│   ├── models/              # ビジネスモデル
 │   ├── services/            # ドメインサービス
 │   └── repositories/        # リポジトリインターフェース（抽象）
 │
-├── application/             # アプリケーション層（ユースケース）
-│   ├── use_cases/           # ユースケース
-│   ├── dto/                 # Data Transfer Objects
-│   └── interfaces/          # 外部サービスのインターフェース
-│
 ├── infrastructure/          # インフラストラクチャ層
-│   ├── database/            # DB接続、SQLAlchemyモデル
+│   ├── database/            # DB接続設定
 │   ├── repositories/        # リポジトリ実装
-│   └── gateways/            # 外部API連携（ゲートウェイ実装）
+│   └── gateways/            # 外部API連携（インターフェース＋実装）
 │
-└── presentation/            # プレゼンテーション層
-    ├── api/                 # FastAPIルーター
-    ├── schemas/             # Pydanticスキーマ
-    └── dependencies.py      # 依存性注入設定
+├── presentation/            # プレゼンテーション層
+│   ├── api/                 # FastAPIコントローラー
+│   ├── schemas/             # Pydanticスキーマ
+│   └── dependencies.py      # 依存性注入設定
+│
+└── jobs/                    # バッチ処理層
+    ├── flows/               # フロー（複数Jobのオーケストレーション）
+    ├── executions/          # 個別Job実行
+    └── lib/                 # Job共通ライブラリ
 ```
 
 ### レイヤー間の依存関係
 
 ```
-presentation → application → domain ← infrastructure
-                  ↓                      ↓
-          (uses interfaces)    (implements interfaces)
+presentation ──┬──> infrastructure ──> domain
+               │
+jobs ──────────┘
 ```
 
 - **Domain**: 何にも依存しない（最内層）
-- **Application**: Domainのみに依存、外部サービスはインターフェース経由
-- **Infrastructure**: Domain/Applicationのインターフェースを実装
-- **Presentation**: Applicationのユースケースに依存
+- **Infrastructure**: Domainのインターフェースを実装
+- **Presentation**: Domain, Infrastructureに依存（Repository/Gateway直接呼び出し）
+- **Jobs**: Domain, Infrastructureに依存
 
 ### ファイル命名規則
 
@@ -149,30 +147,21 @@ async def get_market_status(
     return ApiResponse(success=True, data=data)
 ```
 
-### 依存性注入（クリーンアーキテクチャ）
+### 依存性注入
 
 ```python
 # presentation/dependencies.py
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from infrastructure.database.connection import get_db
-from infrastructure.repositories.postgres_stock_repository import PostgresStockRepository
-from infrastructure.gateways.yfinance_market_data_gateway import YFinanceMarketDataGateway
-from domain.services.market_analyzer import MarketAnalyzer
-from application.use_cases.get_market_status import GetMarketStatusUseCase
+from src.infrastructure.database.connection import get_db
+from src.jobs.flows.refresh_screener import RefreshScreenerFlow
 
-def get_market_status_use_case(
-    db: Session = Depends(get_db)
-) -> GetMarketStatusUseCase:
-    """GetMarketStatusUseCaseの依存性を解決"""
-    # Infrastructure層の実装をユースケースに注入
-    market_data_repo = YFinanceMarketDataGateway()
-    market_analyzer = MarketAnalyzer()
-
-    return GetMarketStatusUseCase(
-        market_data_repo=market_data_repo,
-        market_analyzer=market_analyzer
-    )
+def get_refresh_screener_flow(
+    db: Session = Depends(get_db),
+) -> RefreshScreenerFlow:
+    """RefreshScreenerFlowの依存性を解決"""
+    # Repository/Gatewayを注入してFlowを構築
+    ...
 
 # infrastructure/database/connection.py
 from sqlalchemy.orm import Session
@@ -185,6 +174,9 @@ def get_db() -> Generator[Session, None, None]:
     finally:
         db.close()
 ```
+
+**Note**: コントローラーではRepositoryを直接インスタンス化して使用する。
+依存性注入はJobs層のFlowなど、複雑な構築が必要な場合のみ使用する。
 
 ### エラーハンドリング
 
@@ -336,40 +328,38 @@ def get_latest_snapshot(db: Session) -> MarketSnapshot | None:
 
 | 型の種類 | 配置場所 | 例 |
 |---------|---------|-----|
-| ビジネスエンティティ | `domain/entities/` | `Quote`, `Stock`, `Order` |
-| 値オブジェクト | `domain/value_objects/` | `Price`, `Symbol`, `Period` |
-| ユースケース出力 | `application/dto/` | `GetMarketStatusOutput` |
-| APIレスポンス | `presentation/schemas/` | `QuoteResponse` (Pydantic) |
-| 外部API固有の型 | `infrastructure/gateways/` | （基本的に作らない） |
+| ビジネスモデル | `domain/models/` | `CANSLIMStock`, `Trade`, `MarketSnapshot` |
+| APIスキーマ | `presentation/schemas/` | `QuoteResponse` (Pydantic) |
+| Gatewayデータ型 | `infrastructure/gateways/` | `QuoteData`, `HistoricalBar` |
 
 ### ✅ 正しい例
 
 ```python
-# domain/entities/quote.py
+# domain/models/canslim_stock.py
 @dataclass(frozen=True)
-class Quote:
-    """株価エンティティ（ドメイン層）"""
+class CANSLIMStock:
+    """CAN-SLIM銘柄（ドメイン層）"""
     symbol: str
-    price: float
-    change: float
+    price: Decimal
+    canslim_score: int
     ...
 
-# infrastructure/gateways/yfinance_gateway.py
-from src.domain.entities.quote import Quote
+# infrastructure/gateways/financial_data_gateway.py
+@dataclass(frozen=True)
+class QuoteData:
+    """外部APIから取得した株価データ（Gateway層）"""
+    symbol: str
+    price: float
+    ...
 
-class YFinanceGateway:
-    def get_quote(self, symbol: str) -> Quote:  # ドメイン型を返す
-        ...
-        return Quote(symbol=symbol, price=price, ...)
+# presentation/api/screener_controller.py
+from src.domain.models.canslim_stock import CANSLIMStock
 
-# presentation/api/data_controller.py
-from src.domain.entities.quote import Quote
-
-def _quote_to_response(quote: Quote) -> QuoteResponse:
+def _stock_to_response(stock: CANSLIMStock) -> StockSummarySchema:
     """ドメイン → レスポンススキーマ変換"""
-    return QuoteResponse(
-        symbol=quote.symbol,
-        price=quote.price,
+    return StockSummarySchema(
+        symbol=stock.symbol,
+        price=float(stock.price),
         ...
     )
 ```
@@ -377,18 +367,11 @@ def _quote_to_response(quote: Quote) -> QuoteResponse:
 ### ❌ 避けるべき例
 
 ```python
-# infrastructure/gateways/yfinance_gateway.py
+# presentation/api/screener_controller.py
 
-# Bad: ゲートウェイ内にドメイン概念の型を定義
-@dataclass
-class QuoteData:  # ← これはDomain層に置くべき
-    symbol: str
-    price: float
+# Bad: コントローラー内にビジネスロジックを定義
+def calculate_canslim_score(stock_data):  # ← Domain層に置くべき
     ...
-
-class YFinanceGateway:
-    def get_quote(self, symbol: str) -> QuoteData:
-        ...
 ```
 
 ### 判断基準
@@ -471,14 +454,15 @@ def _quote_to_response(quote: Quote) -> QuoteResponse:
 
 ---
 
-## クリーンアーキテクチャのコード例
+## 3層アーキテクチャのコード例
 
-### Domain層 - エンティティ
+### Domain層 - モデル
 
 ```python
-# domain/entities/market_status.py
+# domain/models/market_snapshot.py
 from dataclasses import dataclass
 from enum import Enum
+from decimal import Decimal
 
 class MarketCondition(Enum):
     RISK_ON = "risk_on"
@@ -486,106 +470,98 @@ class MarketCondition(Enum):
     NEUTRAL = "neutral"
 
 @dataclass
-class MarketStatus:
-    """マーケット状態エンティティ（純粋なドメインロジック）"""
+class MarketSnapshot:
+    """マーケットスナップショット（純粋なドメインロジック）"""
+    vix: Decimal
+    sp500_price: Decimal
+    sp500_rsi: Decimal
     condition: MarketCondition
-    confidence: float
-    vix: float
-    sp500_rsi: float
+    score: int
 
     def is_favorable_for_entry(self) -> bool:
         """エントリーに適した環境か"""
-        return self.condition == MarketCondition.RISK_ON and self.confidence >= 0.6
+        return self.condition == MarketCondition.RISK_ON and self.score >= 2
 ```
 
 ### Domain層 - リポジトリインターフェース
 
 ```python
-# domain/repositories/market_data_repository.py
+# domain/repositories/market_snapshot_repository.py
 from abc import ABC, abstractmethod
+from domain.models.market_snapshot import MarketSnapshot
 
-class MarketDataRepository(ABC):
-    """市場データリポジトリのインターフェース（抽象）"""
+class MarketSnapshotRepository(ABC):
+    """市場スナップショットリポジトリのインターフェース（抽象）"""
 
     @abstractmethod
-    async def get_vix(self) -> float:
+    def find_latest(self) -> MarketSnapshot | None:
         pass
 
     @abstractmethod
-    async def get_sp500_price(self) -> float:
+    def save(self, snapshot: MarketSnapshot) -> None:
         pass
 ```
 
-### Application層 - ユースケース
+### Infrastructure層 - リポジトリ実装
 
 ```python
-# application/use_cases/get_market_status.py
-from dataclasses import dataclass
-from datetime import datetime
-from domain.entities.market_status import MarketStatus
-from domain.services.market_analyzer import MarketAnalyzer
-from domain.repositories.market_data_repository import MarketDataRepository
+# infrastructure/repositories/postgres_market_snapshot_repository.py
+from sqlalchemy.orm import Session
+from domain.repositories.market_snapshot_repository import MarketSnapshotRepository
+from domain.models.market_snapshot import MarketSnapshot
 
-@dataclass
-class GetMarketStatusOutput:
-    status: MarketStatus
-    recommendation: str
-    updated_at: datetime
+class PostgresMarketSnapshotRepository(MarketSnapshotRepository):
+    """PostgreSQLによるMarketSnapshotリポジトリ実装"""
 
-class GetMarketStatusUseCase:
-    """マーケット状態取得ユースケース"""
+    def __init__(self, db: Session):
+        self._db = db
 
-    def __init__(
-        self,
-        market_data_repo: MarketDataRepository,  # インターフェースに依存
-        market_analyzer: MarketAnalyzer
-    ):
-        self._market_data_repo = market_data_repo
-        self._market_analyzer = market_analyzer
+    def find_latest(self) -> MarketSnapshot | None:
+        # SQLAlchemyクエリ実行
+        ...
 
-    async def execute(self) -> GetMarketStatusOutput:
-        vix = await self._market_data_repo.get_vix()
-        # ... ドメインサービスで分析
-        return GetMarketStatusOutput(...)
-```
-
-### Infrastructure層 - ゲートウェイ実装
-
-```python
-# infrastructure/gateways/yfinance_market_data_gateway.py
-import yfinance as yf
-from domain.repositories.market_data_repository import MarketDataRepository
-
-class YFinanceMarketDataGateway(MarketDataRepository):
-    """yfinanceによる市場データ取得実装"""
-
-    async def get_vix(self) -> float:
-        ticker = yf.Ticker("^VIX")
-        return ticker.info.get("regularMarketPrice", 0)
-
-    async def get_sp500_price(self) -> float:
-        ticker = yf.Ticker("^GSPC")
-        return ticker.info.get("regularMarketPrice", 0)
+    def save(self, snapshot: MarketSnapshot) -> None:
+        # 永続化処理
+        ...
 ```
 
 ### Presentation層 - コントローラー
 
 ```python
 # presentation/api/market_controller.py
-from fastapi import APIRouter, Depends
-from presentation.schemas.market import MarketStatusResponse
-from application.use_cases.get_market_status import GetMarketStatusUseCase
-from presentation.dependencies import get_market_status_use_case
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from src.infrastructure.database.connection import get_db
+from src.infrastructure.repositories.postgres_market_snapshot_repository import (
+    PostgresMarketSnapshotRepository,
+)
+from src.presentation.schemas.market import MarketStatusResponse
+from src.presentation.schemas.common import ApiResponse
 
 router = APIRouter(prefix="/market", tags=["market"])
 
-@router.get("/status")
-async def get_market_status(
-    use_case: GetMarketStatusUseCase = Depends(get_market_status_use_case)
-):
+
+def _snapshot_to_response(snapshot: MarketSnapshot) -> MarketStatusResponse:
+    """Domain Model → Schema変換"""
+    return MarketStatusResponse(
+        condition=snapshot.condition.value,
+        score=snapshot.score,
+        ...
+    )
+
+
+@router.get("/status", response_model=ApiResponse[MarketStatusResponse])
+def get_market_status(
+    db: Session = Depends(get_db),
+) -> ApiResponse[MarketStatusResponse]:
     """マーケット状態を取得"""
-    output = await use_case.execute()
-    return MarketStatusResponse.from_domain(output)
+    repo = PostgresMarketSnapshotRepository(db)
+    snapshot = repo.find_latest()
+
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Market data not available")
+
+    return ApiResponse(success=True, data=_snapshot_to_response(snapshot))
 ```
 
 ---

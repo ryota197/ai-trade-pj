@@ -1,9 +1,9 @@
-# サービスコンポーネント設計（クリーンアーキテクチャ）
+# サービスコンポーネント設計（シンプル3層アーキテクチャ）
 
 ## 概要
 
-本プロジェクトはクリーンアーキテクチャに基づいて設計する。
-依存関係は外側から内側に向かい、ビジネスロジックは外部の詳細（DB、API、フレームワーク）に依存しない。
+本プロジェクトは「A Philosophy of Software Design」の原則に基づき、
+**浅いモジュール（pass-through層）を排除したシンプルな3層アーキテクチャ**を採用する。
 
 ---
 
@@ -14,14 +14,14 @@
 │                    Frameworks & Drivers                          │
 │         (FastAPI, PostgreSQL, yfinance, Web Browser)            │
 ├─────────────────────────────────────────────────────────────────┤
-│                    Interface Adapters                            │
-│              (Controllers, Gateways, Presenters)                │
+│                  Presentation + Jobs                             │
+│              (Controllers, Schemas, Batch Flows)                │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Application                                 │
-│                      (Use Cases)                                │
+│                    Infrastructure                                │
+│              (Repositories, Gateways)                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                        Domain                                    │
-│               (Entities, Value Objects, Rules)                  │
+│               (Models, Services, Repository Interfaces)         │
 └─────────────────────────────────────────────────────────────────┘
 
 依存の方向: 外側 → 内側（内側は外側を知らない）
@@ -40,70 +40,60 @@
 
 | 要素 | 説明 |
 |------|------|
-| Entity | ビジネスエンティティ（Stock, MarketStatus等） |
-| Value Object | 不変の値オブジェクト（CANSLIMScore等） |
-| Domain Service | 複数エンティティにまたがるロジック |
+| Model | ビジネスエンティティ（CANSLIMStock, Trade等） |
+| Domain Service | 複数エンティティにまたがるロジック（RSCalculator等） |
 | Repository Interface | データアクセスの抽象インターフェース |
 
-> 詳細・コード例: [layers/domain-layer.md](./layers/domain-layer.md)
-
 ---
 
-### 2. Application層（ユースケース層）
-
-**責務**: アプリケーション固有のビジネスルール、ユースケースの実装
-
-- Domain層のみに依存
-- 外部の詳細（DB、API）はインターフェース経由で利用
-
-| 要素 | 説明 |
-|------|------|
-| Use Case | アプリケーション固有のビジネスロジック |
-| DTO | 入出力データの定義 |
-| Gateway Interface | 外部サービスの抽象インターフェース |
-
-> 詳細・コード例: [layers/application-layer.md](./layers/application-layer.md)
-
----
-
-### 3. Infrastructure層（インフラ層）
+### 2. Infrastructure層（インフラ層）
 
 **責務**: 外部サービス、データベース、APIとの実際の連携
 
-- Domain/Application層のインターフェースを実装
+- Domain層のインターフェースを実装
 - 外部ライブラリ（yfinance, SQLAlchemy等）に依存
 
 | 要素 | 説明 |
 |------|------|
 | Repository Impl | リポジトリインターフェースの実装 |
-| Gateway Impl | ゲートウェイインターフェースの実装 |
-| Database | DB接続、SQLAlchemyモデル |
-
-> 詳細・コード例: [layers/infrastructure-layer.md](./layers/infrastructure-layer.md)
+| Gateway | 外部APIとの連携（インターフェース＋実装） |
+| Database | DB接続設定 |
 
 ---
 
-### 4. Presentation層（プレゼンテーション層）
+### 3. Presentation層（プレゼンテーション層）
 
 **責務**: HTTPリクエスト/レスポンスの処理、API定義
 
-- Application層のユースケースを呼び出す
+- Repository/Gatewayを直接呼び出す
+- Domain Model → Schema変換を担当
 - FastAPIのルーター、Pydanticスキーマを定義
 
 | 要素 | 説明 |
 |------|------|
-| Controller | APIルーター、エンドポイント定義 |
+| Controller | APIルーター、Repository/Gateway呼び出し |
 | Schema | Pydanticスキーマ（リクエスト/レスポンス） |
 | Dependencies | 依存性注入設定 |
 
-> 詳細・コード例: [layers/presentation-layer.md](./layers/presentation-layer.md)
+---
+
+### 4. Jobs層（バッチ処理層）
+
+**責務**: 長時間バッチ処理のオーケストレーション
+
+- Repository/Gatewayを直接利用
+- 管理画面からトリガーで実行
+
+| 要素 | 説明 |
+|------|------|
+| Flow | 複数Jobのオーケストレーション |
+| Job | 個別の処理単位 |
 
 ---
 
 ## Frontend（参考）
 
-フロントエンドは厳密なクリーンアーキテクチャではなく、
-シンプルな構成を維持しつつ、責務分離を意識する。
+フロントエンドはシンプルな構成を維持しつつ、責務分離を意識する。
 
 ```
 src/
@@ -119,15 +109,29 @@ src/
 ## 依存関係の方向
 
 ```
-Presentation → Application → Domain ← Infrastructure
-                    ↓                      ↓
-              (uses interfaces)    (implements interfaces)
+Presentation ──┬──> Infrastructure ──> Domain
+               │
+Jobs ──────────┘
 ```
 
-- **Domain**: 何にも依存しない
-- **Application**: Domainのみに依存、Infrastructureはインターフェース経由
-- **Infrastructure**: Domain/Applicationのインターフェースを実装
-- **Presentation**: Application（ユースケース）に依存
+- **Domain**: 何にも依存しない（最内層）
+- **Infrastructure**: Domainのインターフェースを実装
+- **Presentation**: Domain, Infrastructureに依存
+- **Jobs**: Domain, Infrastructureに依存
+
+---
+
+## 設計原則
+
+### なぜApplication層を削除したか
+
+従来のクリーンアーキテクチャでは4層構造だったが、以下の理由で3層に簡素化：
+
+1. **浅いモジュール問題**: UseCaseがRepository呼び出し→DTO変換のみの「pass-through」になっていた
+2. **不要な抽象化**: 本PoCでは複数実装の差し替えが不要
+3. **YAGNI原則**: 必要になるまで抽象化層を追加しない
+
+> 参考: "A Philosophy of Software Design" by John Ousterhout
 
 ---
 
@@ -136,7 +140,6 @@ Presentation → Application → Domain ← Infrastructure
 | レイヤー | テスト種別 | 特徴 |
 |---------|-----------|------|
 | Domain | 単体テスト | モック不要、純粋なロジックテスト |
-| Application | 単体テスト | リポジトリ/ゲートウェイをモック化 |
 | Infrastructure | 統合テスト | 実際のDB/APIとの接続テスト |
 | Presentation | E2Eテスト | 全レイヤー統合テスト |
 
@@ -146,8 +149,5 @@ Presentation → Application → Domain ← Infrastructure
 
 | ドキュメント | 内容 |
 |-------------|------|
-| [layers/domain-layer.md](./layers/domain-layer.md) | Domain層の詳細・コード例 |
-| [layers/application-layer.md](./layers/application-layer.md) | Application層の詳細・コード例 |
-| [layers/infrastructure-layer.md](./layers/infrastructure-layer.md) | Infrastructure層の詳細・コード例 |
-| [layers/presentation-layer.md](./layers/presentation-layer.md) | Presentation層の詳細・コード例 |
-| [directory-structure.md](./directory-structure.md) | ディレクトリ構成 |
+| [service-architecture.md](../service-architecture.md) | サービスアーキテクチャ全体設計 |
+| [backend-guidelines.md](../coding-standard/backend-guidelines.md) | バックエンドコーディング規約 |

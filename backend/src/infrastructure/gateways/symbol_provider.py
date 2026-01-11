@@ -2,7 +2,25 @@
 
 import aiohttp
 
-from src.jobs.flows.refresh_screener import SymbolProvider
+
+class SymbolProvider:
+    """
+    シンボルプロバイダー（インターフェース）
+
+    S&P500やNASDAQ100のシンボルリストを取得する。
+    """
+
+    async def get_symbols(self, source: str) -> list[str]:
+        """
+        シンボルリストを取得
+
+        Args:
+            source: "sp500" | "nasdaq100"
+
+        Returns:
+            list[str]: シンボルリスト
+        """
+        raise NotImplementedError()
 
 
 class WikipediaSymbolProvider(SymbolProvider):

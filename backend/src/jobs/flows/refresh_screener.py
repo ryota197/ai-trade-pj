@@ -5,22 +5,23 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from src.jobs.executions.collect_stock_data import (
-    CollectInput,
-    CollectStockDataJob,
+from src.infrastructure.gateways.symbol_provider import SymbolProvider
+from src.jobs.executions.calculate_canslim import (
+    CalculateCANSLIMInput,
+    CalculateCANSLIMJob,
 )
 from src.jobs.executions.calculate_rs_rating import (
     CalculateRSRatingInput,
     CalculateRSRatingJob,
 )
-from src.jobs.executions.calculate_canslim import (
-    CalculateCANSLIMInput,
-    CalculateCANSLIMJob,
+from src.jobs.executions.collect_stock_data import (
+    CollectInput,
+    CollectStockDataJob,
 )
 from src.jobs.lib import (
     FlowExecution,
-    JobExecution,
     FlowExecutionRepository,
+    JobExecution,
     JobExecutionRepository,
 )
 
@@ -68,7 +69,7 @@ class RefreshScreenerFlow:
         collect_job: CollectStockDataJob,
         rs_rating_job: CalculateRSRatingJob,
         canslim_job: CalculateCANSLIMJob,
-        symbol_provider: "SymbolProvider",
+        symbol_provider: SymbolProvider,
         flow_repository: FlowExecutionRepository,
         job_repository: JobExecutionRepository,
     ) -> None:
@@ -197,23 +198,3 @@ class RefreshScreenerFlow:
             return asdict(result)
         except TypeError:
             return {"raw": str(result)}
-
-
-class SymbolProvider:
-    """
-    シンボルプロバイダー（インターフェース）
-
-    S&P500やNASDAQ100のシンボルリストを取得する。
-    """
-
-    async def get_symbols(self, source: str) -> list[str]:
-        """
-        シンボルリストを取得
-
-        Args:
-            source: "sp500" | "nasdaq100"
-
-        Returns:
-            list[str]: シンボルリスト
-        """
-        raise NotImplementedError()

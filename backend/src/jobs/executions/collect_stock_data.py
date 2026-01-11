@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from src.application.interfaces.financial_data_gateway import FinancialDataGateway
+from src.infrastructure.gateways.financial_data_gateway import FinancialDataGateway
 from src.domain.models.canslim_stock import CANSLIMStock
 from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
 from src.domain.services.rs_calculator import PriceBar, RSCalculator

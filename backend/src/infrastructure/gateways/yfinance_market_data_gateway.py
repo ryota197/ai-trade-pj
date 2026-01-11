@@ -2,10 +2,8 @@
 
 import yfinance as yf
 
-from src.domain.repositories.market_data_repository import MarketDataRepository
 
-
-class YFinanceMarketDataGateway(MarketDataRepository):
+class YFinanceMarketDataGateway:
     """
     yfinance APIを使用したマーケットデータ取得実装
 

@@ -4,10 +4,10 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.application.use_cases.data.get_financial_metrics import (
-    GetFinancialMetricsUseCase,
+from src.infrastructure.gateways.financial_data_gateway import (
+    QuoteData,
+    HistoricalBar,
 )
-from src.domain.models import HistoricalPrice, Quote
 from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
 from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.quote import (
@@ -22,14 +22,9 @@ router = APIRouter(prefix="/data", tags=["data"])
 # Gateway インスタンス
 gateway = YFinanceGateway()
 
-# UseCase インスタンス
-get_financial_metrics_use_case = GetFinancialMetricsUseCase(
-    financial_gateway=gateway,
-)
 
-
-def _quote_to_response(quote: Quote) -> QuoteResponse:
-    """ドメインエンティティをレスポンススキーマに変換"""
+def _quote_to_response(quote: QuoteData) -> QuoteResponse:
+    """DTOをレスポンススキーマに変換"""
     return QuoteResponse(
         symbol=quote.symbol,
         price=quote.price,
@@ -48,9 +43,9 @@ def _history_to_response(
     symbol: str,
     period: str,
     interval: str,
-    history: list[HistoricalPrice],
+    history: list[HistoricalBar],
 ) -> HistoryResponse:
-    """ドメインエンティティをレスポンススキーマに変換"""
+    """DTOをレスポンススキーマに変換"""
     return HistoryResponse(
         symbol=symbol.upper(),
         period=period,
@@ -75,16 +70,18 @@ def _history_to_response(
     summary="株価取得",
     description="指定したシンボルの現在の株価データを取得する",
 )
-def get_quote(symbol: str) -> ApiResponse[QuoteResponse]:
+async def get_quote(symbol: str) -> ApiResponse[QuoteResponse]:
     """株価データを取得"""
     try:
-        quote = gateway.get_quote_sync(symbol)
+        quote = await gateway.get_quote(symbol)
+        if quote is None:
+            raise HTTPException(status_code=404, detail=f"Invalid symbol: {symbol}")
         return ApiResponse(
             success=True,
             data=_quote_to_response(quote),
         )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch quote: {e}")
 
@@ -95,20 +92,22 @@ def get_quote(symbol: str) -> ApiResponse[QuoteResponse]:
     summary="過去データ取得",
     description="指定したシンボルの過去の株価データを取得する",
 )
-def get_history(
+async def get_history(
     symbol: str,
     period: str = Query(default="1mo", description="期間（1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max）"),
     interval: str = Query(default="1d", description="間隔（1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo）"),
 ) -> ApiResponse[HistoryResponse]:
     """過去の株価データを取得"""
     try:
-        history = gateway.get_history_sync(symbol, period=period, interval=interval)
+        history = await gateway.get_price_history(symbol, period=period, interval=interval)
+        if not history:
+            raise HTTPException(status_code=404, detail=f"No history data for symbol: {symbol}")
         return ApiResponse(
             success=True,
             data=_history_to_response(symbol, period, interval, history),
         )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {e}")
 
@@ -120,15 +119,9 @@ def get_history(
     description="指定したシンボルの財務指標（EPS成長率、ROE等）を取得する",
 )
 async def get_financials(symbol: str) -> ApiResponse[FinancialsResponse]:
-    """
-    財務指標を取得
-
-    UseCase経由でGatewayから生データを取得し、
-    Domain層のEPSGrowthCalculatorで成長率を計算する。
-    """
+    """財務指標を取得"""
     try:
-        # UseCaseを使用して財務指標を取得
-        metrics = await get_financial_metrics_use_case.execute(symbol)
+        metrics = await gateway.get_financial_metrics(symbol)
 
         if metrics is None:
             raise HTTPException(
