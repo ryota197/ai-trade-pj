@@ -3,7 +3,7 @@
 ## 概要
 
 AI Trade Appは、CAN-SLIM投資法に基づく株式スクリーニングとペーパートレーディングを提供するWebアプリケーション。
-バックエンドはクリーンアーキテクチャ（DDD）、フロントエンドはNext.js App Routerを採用。
+バックエンドはシンプルな3層アーキテクチャ、フロントエンドはNext.js App Routerを採用。
 
 ---
 
@@ -23,11 +23,14 @@ graph TB
     end
 
     subgraph Backend["Backend (FastAPI)"]
-        Presentation[Presentation<br/>API]
-        Application[Application<br/>Use Cases]
-        Domain[Domain<br/>Entities]
-        Infrastructure[Infrastructure<br/>Repos]
-        Presentation --> Application --> Domain
+        Presentation[Presentation<br/>API + Schemas]
+        Jobs[Jobs<br/>Batch]
+        Domain[Domain<br/>Models + Services]
+        Infrastructure[Infrastructure<br/>Repos/Gateways]
+        Presentation --> Infrastructure
+        Presentation --> Domain
+        Jobs --> Infrastructure
+        Jobs --> Domain
         Infrastructure --> Domain
     end
 
@@ -46,25 +49,26 @@ graph TB
 
 ## バックエンド アーキテクチャ
 
-### レイヤー構成（クリーンアーキテクチャ）
+### レイヤー構成（シンプル3層）
 
 ```mermaid
 graph LR
-    subgraph "Clean Architecture Layers"
+    subgraph "Simplified Architecture"
         direction LR
-        P[Presentation] --> A[Application]
-        A --> D[Domain]
-        I[Infrastructure] --> D
-        I --> A
+        P[Presentation] --> I[Infrastructure]
+        P --> D[Domain]
+        J[Jobs] --> I
+        J --> D
+        I --> D
     end
 ```
 
 ```
 src/
-├── domain/           # ドメイン層（最内層）
-├── application/      # アプリケーション層
-├── infrastructure/   # インフラストラクチャ層
-├── presentation/     # プレゼンテーション層（最外層）
+├── domain/           # ドメイン層（ビジネスロジック）
+├── infrastructure/   # インフラ層（Repository/Gateway実装）
+├── presentation/     # プレゼンテーション層（API + Schemas）
+├── jobs/             # バッチ処理層
 └── main.py          # エントリーポイント
 ```
 
@@ -72,84 +76,157 @@ src/
 
 | 層 | 責務 | 依存方向 |
 |----|------|---------|
-| **Domain** | ビジネスルール、エンティティ、値オブジェクト | 依存なし（最内層） |
-| **Application** | ユースケース、DTO、オーケストレーション | Domain のみ |
-| **Infrastructure** | DB実装、外部API、リポジトリ実装 | Domain, Application |
-| **Presentation** | HTTPエンドポイント、リクエスト/レスポンス | Application |
+| **Domain** | ビジネスルール、モデル、ドメインサービス、Repositoryインターフェース | 依存なし（最内層） |
+| **Infrastructure** | DB実装、外部API、Repository/Gateway実装 | Domain のみ |
+| **Presentation** | HTTPエンドポイント、Schemas、データ変換 | Domain, Infrastructure |
+| **Jobs** | バッチ処理フロー、定期実行ジョブ | Domain, Infrastructure |
+
+### インターフェースの配置
+
+| 種類 | インターフェース位置 | 実装位置 | 理由 |
+|------|---------------------|----------|------|
+| Repository | `domain/repositories/` | `infrastructure/repositories/` | Domain層がDBアクセスを抽象化 |
+| Gateway | `infrastructure/gateways/` | `infrastructure/gateways/` | 実装と同居（シンプル化） |
+
+> **設計方針**: "A Philosophy of Software Design" に基づき、浅いモジュール（pass-through層）を排除してシンプル化
+
+---
 
 ### Domain層 詳細
 
 ```mermaid
 graph TB
     subgraph Domain["Domain Layer"]
-        subgraph Entities
-            Stock[Stock]
-            PaperTrade[PaperTrade]
+        subgraph Models["Models (Entity/Value Object)"]
+            CANSLIMStock[CANSLIMStock]
+            Trade[Trade]
             WatchlistItem[WatchlistItem]
-            MarketStatus[MarketStatus]
-        end
-
-        subgraph ValueObjects["Value Objects"]
-            CANSLIMScore[CANSLIMScore]
-            PerformanceMetrics[PerformanceMetrics]
-            MarketIndicators[MarketIndicators]
+            MarketSnapshot[MarketSnapshot]
         end
 
         subgraph Services["Domain Services"]
-            RSRatingCalculator[RSRatingCalculator]
-            EPSGrowthCalculator[EPSGrowthCalculator]
-            PerformanceCalculator[PerformanceCalculator]
+            RSCalculator[RSCalculator]
+            CANSLIMScorer[CANSLIMScorer]
             MarketAnalyzer[MarketAnalyzer]
         end
 
         subgraph Repositories["Repository Interfaces"]
-            StockRepository[StockRepository]
+            CANSLIMStockRepository[CANSLIMStockRepository]
             TradeRepository[TradeRepository]
             WatchlistRepository[WatchlistRepository]
         end
     end
 
-    Services --> Entities
-    Services --> ValueObjects
-    Entities --> ValueObjects
+    Services --> Models
 ```
 
 ```
 domain/
-├── entities/          # エンティティ（識別子を持つオブジェクト）
-│   ├── stock.py           # 銘柄
-│   ├── paper_trade.py     # ペーパートレード
-│   ├── watchlist_item.py  # ウォッチリスト項目
-│   └── market_status.py   # マーケット状態
+├── models/           # モデル（Entity + Value Object を統合）
+│   ├── canslim_stock.py      # CAN-SLIM銘柄
+│   ├── trade.py              # トレード
+│   ├── watchlist_item.py     # ウォッチリスト項目
+│   ├── market_snapshot.py    # マーケットスナップショット
+│   └── screening_criteria.py # スクリーニング条件
 │
-├── value_objects/     # 値オブジェクト（不変、値で比較）
-│   ├── canslim_score.py       # CAN-SLIMスコア
-│   ├── performance_metrics.py # パフォーマンス指標
-│   └── market_indicators.py   # 市場指標
+├── services/         # ドメインサービス
+│   ├── rs_calculator.py          # RS（相対強度）計算
+│   ├── rs_rating_calculator.py   # RS Rating計算
+│   ├── canslim_scorer.py         # CAN-SLIMスコア計算
+│   └── market_analyzer.py        # 市場分析
 │
-├── services/          # ドメインサービス（複数オブジェクト横断ロジック）
-│   ├── rs_rating_calculator.py     # RS Rating計算
-│   ├── eps_growth_calculator.py    # EPS成長率計算
-│   ├── performance_calculator.py   # パフォーマンス計算
-│   └── market_analyzer.py          # 市場分析
-│
-├── repositories/      # リポジトリインターフェース
-│   ├── stock_repository.py
+├── repositories/     # リポジトリインターフェース
+│   ├── canslim_stock_repository.py
 │   ├── trade_repository.py
-│   └── watchlist_repository.py
+│   ├── watchlist_repository.py
+│   └── market_snapshot_repository.py
 │
-└── constants/         # ドメイン定数
-    └── canslim_thresholds.py
+└── constants/        # ドメイン定数
+    ├── canslim_defaults.py
+    └── trading_days.py
 ```
+
+### Presentation層 詳細
+
+```
+presentation/
+├── api/              # APIエンドポイント（Controllers）
+│   ├── screener_controller.py    # スクリーナーAPI
+│   ├── portfolio_controller.py   # ポートフォリオAPI
+│   ├── market_controller.py      # マーケットAPI
+│   ├── data_controller.py        # データ取得API
+│   └── admin_controller.py       # 管理API
+│
+├── schemas/          # リクエスト/レスポンススキーマ
+│   ├── screener.py
+│   ├── portfolio.py
+│   ├── market.py
+│   └── common.py
+│
+└── dependencies.py   # FastAPI依存性注入
+```
+
+**Controllerの責務**:
+- HTTPリクエスト/レスポンス処理
+- Repository/Gatewayの直接呼び出し
+- Domain Model → Schema変換
+
+### Infrastructure層 詳細
+
+```
+infrastructure/
+├── repositories/     # Repository実装
+│   ├── postgres_canslim_stock_repository.py
+│   ├── postgres_trade_repository.py
+│   ├── postgres_watchlist_repository.py
+│   └── postgres_market_snapshot_repository.py
+│
+├── gateways/         # Gateway（インターフェース＋実装）
+│   ├── financial_data_gateway.py    # Gatewayインターフェース
+│   ├── yfinance_gateway.py          # yfinance実装
+│   └── symbol_provider.py           # シンボルプロバイダー
+│
+└── database/         # DB接続
+    ├── connection.py
+    └── init.sql
+```
+
+### Jobs層 詳細（バッチ処理）
+
+スクリーナーデータ更新などの長時間バッチ処理を担当。
+Repository/Gatewayを直接利用するバッチ専用のオーケストレーション層。
+
+```
+jobs/
+├── flows/            # フロー（複数Jobのオーケストレーション）
+│   └── refresh_screener.py   # スクリーナー更新フロー
+│
+├── executions/       # 個別Job実行
+│   ├── base.py                   # Job基底クラス
+│   ├── collect_stock_data.py     # Job1: データ収集
+│   ├── calculate_rs_rating.py    # Job2: RS Rating計算
+│   └── calculate_canslim.py      # Job3: CAN-SLIMスコア計算
+│
+└── lib/              # Job共通ライブラリ
+    ├── models.py         # 実行記録モデル
+    └── repositories.py   # 実行記録リポジトリ
+```
+
+**Jobs層の位置づけ**:
+- バッチ処理専用のオーケストレーション層
+- HTTPリクエストではなく、管理画面からのトリガーで実行
+- 長時間実行、段階的処理、リトライ対応
+- Repository/Gatewayを直接利用
 
 ### DDDパターンの使い分け
 
 | パターン | 使用条件 | 例 |
 |---------|---------|-----|
-| **Entity** | 識別子が必要、ライフサイクルがある | PaperTrade, WatchlistItem |
-| **Value Object** | 不変、値で等価性判断 | CANSLIMScore, PerformanceMetrics |
-| **Domain Service** | 複数オブジェクト横断、ビジネスポリシー | PerformanceCalculator, MarketAnalyzer |
-| **Repository** | 永続化の抽象化 | TradeRepository (interface) |
+| **Entity** | 識別子が必要、ライフサイクルがある | Trade, WatchlistItem |
+| **Value Object** | 不変、値で等価性判断 | ScreeningCriteria |
+| **Domain Service** | 複数オブジェクト横断、ビジネスポリシー | RSCalculator, MarketAnalyzer |
+| **Repository** | 永続化の抽象化 | CANSLIMStockRepository (interface) |
+| **Gateway** | 外部APIの抽象化 | FinancialDataGateway (interface) |
 
 ---
 
@@ -248,20 +325,20 @@ graph LR
 sequenceDiagram
     participant C as Component
     participant H as Hook
-    participant R as Route Handler
-    participant U as Use Case
+    participant BFF as Route Handler
+    participant Ctrl as Controller
     participant Repo as Repository
     participant DB as Database
 
     C->>H: マウント時
-    H->>R: fetch('/api/...')
-    R->>U: プロキシ
-    U->>Repo: データ取得
+    H->>BFF: fetch('/api/...')
+    BFF->>Ctrl: プロキシ
+    Ctrl->>Repo: データ取得
     Repo->>DB: クエリ
     DB-->>Repo: 結果
-    Repo-->>U: Entity
-    U-->>R: DTO
-    R-->>H: JSON
+    Repo-->>Ctrl: Domain Model
+    Ctrl-->>BFF: Schema (JSON)
+    BFF-->>H: JSON
     H-->>C: state更新
     C->>C: 再レンダリング
 ```
@@ -273,22 +350,46 @@ sequenceDiagram
     participant User as ユーザー
     participant C as Component
     participant H as Hook
-    participant R as Route Handler
-    participant U as Use Case
+    participant BFF as Route Handler
+    participant Ctrl as Controller
     participant D as Domain
     participant Repo as Repository
 
     User->>C: フォーム送信
     C->>H: 関数呼び出し
-    H->>R: fetch(POST)
-    R->>U: プロキシ
-    U->>D: ドメインロジック
-    D-->>U: 検証済みEntity
-    U->>Repo: 永続化
-    Repo-->>U: 保存結果
-    U-->>R: DTO
-    R-->>H: JSON
+    H->>BFF: fetch(POST)
+    BFF->>Ctrl: プロキシ
+    Ctrl->>D: ドメインロジック
+    D-->>Ctrl: 検証済みEntity
+    Ctrl->>Repo: 永続化
+    Repo-->>Ctrl: 保存結果
+    Ctrl-->>BFF: Schema (JSON)
+    BFF-->>H: JSON
     H-->>C: state更新
+```
+
+### バッチ処理（Jobs）
+
+```mermaid
+sequenceDiagram
+    participant Admin as 管理画面
+    participant API as Admin API
+    participant Flow as RefreshScreenerFlow
+    participant Job1 as CollectStockDataJob
+    participant Job2 as CalculateRSRatingJob
+    participant Job3 as CalculateCANSLIMJob
+    participant DB as Database
+
+    Admin->>API: POST /admin/refresh
+    API->>Flow: execute()
+    Flow->>Job1: run()
+    Job1->>DB: 銘柄データ保存
+    Flow->>Job2: run()
+    Job2->>DB: RS Rating更新
+    Flow->>Job3: run()
+    Job3->>DB: CAN-SLIMスコア更新
+    Flow-->>API: 完了
+    API-->>Admin: 結果表示
 ```
 
 ---
@@ -297,26 +398,23 @@ sequenceDiagram
 
 ### 機能モジュール
 
-| モジュール | 説明 | 主要エンティティ |
+| モジュール | 説明 | 主要モデル |
 |-----------|------|-----------------|
-| **Market** | 市場データ、指標 | MarketStatus, Quote |
-| **Screener** | CAN-SLIMスクリーニング | Stock, CANSLIMScore |
-| **Portfolio** | ウォッチリスト、トレード | WatchlistItem, PaperTrade |
-| **Performance** | パフォーマンス分析 | PerformanceMetrics |
+| **Market** | 市場データ、指標 | MarketSnapshot |
+| **Screener** | CAN-SLIMスクリーニング | CANSLIMStock |
+| **Portfolio** | ウォッチリスト、トレード | WatchlistItem, Trade |
 
 ### 依存関係
 
 ```mermaid
 graph LR
     Portfolio[Portfolio] --> Market[Market]
-    Portfolio --> Performance[Performance]
     Screener[Screener] --> Market
 
     subgraph Modules
         Market
         Screener
         Portfolio
-        Performance
     end
 ```
 
@@ -326,10 +424,11 @@ graph LR
 
 ### バックエンド
 
-1. **依存性逆転**: 内層は外層に依存しない（Repository Interface）
+1. **シンプルさ優先**: "A Philosophy of Software Design" に基づき、浅いモジュールを排除
 2. **単一責任**: 各クラスは1つの責務のみ
 3. **不変性**: Value Objectは `frozen=True` で不変に
 4. **ドメイン駆動**: ビジネスロジックはDomain層に集約
+5. **YAGNI**: 必要になるまで抽象化層を追加しない
 
 ### フロントエンド
 

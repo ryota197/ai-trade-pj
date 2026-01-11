@@ -1,19 +1,17 @@
 """スクリーナーAPI"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import date, datetime
+from decimal import Decimal
 
-from src.application.dto.screener_dto import (
-    ScreenerFilterInput,
-    StockDetailInput,
-)
-from src.application.use_cases.screener.get_stock_detail import GetStockDetailUseCase
-from src.application.use_cases.screener.screen_canslim_stocks import (
-    ScreenCANSLIMStocksUseCase,
-)
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
 from src.domain.constants import CANSLIMDefaults
-from src.presentation.dependencies import (
-    get_screen_canslim_use_case,
-    get_stock_detail_use_case,
+from src.domain.models.canslim_stock import CANSLIMStock
+from src.domain.models.screening_criteria import ScreeningCriteria
+from src.infrastructure.database.connection import get_db
+from src.infrastructure.repositories.postgres_canslim_stock_repository import (
+    PostgresCANSLIMStockRepository,
 )
 from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.screener import (
@@ -25,10 +23,132 @@ from src.presentation.schemas.screener import (
     StockSummarySchema,
 )
 
-# 定数エイリアス（可読性向上）
+# 定数エイリアス
 _D = CANSLIMDefaults
 
 router = APIRouter(prefix="/screener", tags=["screener"])
+
+
+# ========================================
+# ヘルパー関数
+# ========================================
+
+
+def _score_to_grade(score: int) -> str:
+    """スコアをグレードに変換"""
+    if score >= 80:
+        return "A"
+    elif score >= 60:
+        return "B"
+    elif score >= 40:
+        return "C"
+    elif score >= 20:
+        return "D"
+    return "F"
+
+
+def _count_passing(stock: CANSLIMStock) -> int:
+    """合格項目数をカウント"""
+    passing = 0
+    for score in [
+        stock.score_c,
+        stock.score_a,
+        stock.score_n,
+        stock.score_s,
+        stock.score_l,
+        stock.score_i,
+    ]:
+        if score is not None and score >= 10:
+            passing += 1
+    return passing
+
+
+def _create_criteria_schema(name: str, score: int | None) -> CANSLIMCriteriaSchema:
+    """スコアからCriteriaSchemaを作成"""
+    score_val = score or 0
+    return CANSLIMCriteriaSchema(
+        name=name,
+        score=score_val,
+        grade=_score_to_grade(score_val),
+        value=None,
+        threshold=0.0,
+        description="",
+    )
+
+
+def _stock_to_summary(stock: CANSLIMStock) -> StockSummarySchema:
+    """CANSLIMStockをサマリースキーマに変換"""
+    return StockSummarySchema(
+        symbol=stock.symbol,
+        name=stock.name or stock.symbol,
+        price=float(stock.price) if stock.price else 0.0,
+        change_percent=float(stock.change_percent) if stock.change_percent else 0.0,
+        rs_rating=stock.rs_rating or 0,
+        canslim_score=stock.canslim_score or 0,
+        volume_ratio=float(stock.volume_ratio()) if stock.volume_ratio() else 0.0,
+        distance_from_52w_high=(
+            float(stock.distance_from_52week_high())
+            if stock.distance_from_52week_high()
+            else 0.0
+        ),
+    )
+
+
+def _stock_to_detail(stock: CANSLIMStock) -> StockDetailSchema:
+    """CANSLIMStockを詳細スキーマに変換"""
+    canslim_schema = None
+    if stock.canslim_score is not None:
+        canslim_schema = CANSLIMScoreSchema(
+            total_score=stock.canslim_score,
+            overall_grade=_score_to_grade(stock.canslim_score),
+            passing_count=_count_passing(stock),
+            c_score=_create_criteria_schema(
+                "C - Current Quarterly Earnings", stock.score_c
+            ),
+            a_score=_create_criteria_schema("A - Annual Earnings", stock.score_a),
+            n_score=_create_criteria_schema("N - New High", stock.score_n),
+            s_score=_create_criteria_schema("S - Supply and Demand", stock.score_s),
+            l_score=_create_criteria_schema("L - Leader", stock.score_l),
+            i_score=_create_criteria_schema(
+                "I - Institutional Sponsorship", stock.score_i
+            ),
+        )
+
+    price = float(stock.price) if stock.price else 0.0
+    change_percent = float(stock.change_percent) if stock.change_percent else 0.0
+
+    return StockDetailSchema(
+        symbol=stock.symbol,
+        name=stock.name or stock.symbol,
+        price=price,
+        change=price * change_percent / 100,
+        change_percent=change_percent,
+        volume=stock.volume or 0,
+        avg_volume=stock.avg_volume_50d or 0,
+        market_cap=float(stock.market_cap) if stock.market_cap else None,
+        pe_ratio=None,
+        week_52_high=float(stock.week_52_high) if stock.week_52_high else 0.0,
+        week_52_low=float(stock.week_52_low) if stock.week_52_low else 0.0,
+        eps_growth_quarterly=(
+            float(stock.eps_growth_quarterly) if stock.eps_growth_quarterly else None
+        ),
+        eps_growth_annual=(
+            float(stock.eps_growth_annual) if stock.eps_growth_annual else None
+        ),
+        rs_rating=stock.rs_rating or 0,
+        institutional_ownership=(
+            float(stock.institutional_ownership)
+            if stock.institutional_ownership
+            else None
+        ),
+        canslim_score=canslim_schema,
+        updated_at=stock.updated_at or datetime.now(),
+    )
+
+
+# ========================================
+# エンドポイント
+# ========================================
 
 
 @router.get(
@@ -37,7 +157,7 @@ router = APIRouter(prefix="/screener", tags=["screener"])
     summary="CAN-SLIMスクリーニング",
     description="CAN-SLIM条件を満たす銘柄をスクリーニングする",
 )
-async def screen_canslim_stocks(
+def screen_canslim_stocks(
     min_rs_rating: int = Query(
         _D.MIN_RS_RATING, ge=1, le=99, description="最小RS Rating"
     ),
@@ -60,54 +180,44 @@ async def screen_canslim_stocks(
         _D.DEFAULT_LIMIT, ge=1, le=_D.MAX_LIMIT, description="取得件数"
     ),
     offset: int = Query(_D.DEFAULT_OFFSET, ge=0, description="オフセット"),
-    use_case: ScreenCANSLIMStocksUseCase = Depends(get_screen_canslim_use_case),
+    db: Session = Depends(get_db),
 ) -> ApiResponse[ScreenerResponse]:
     """CAN-SLIM条件でスクリーニングを実行"""
     try:
-        # 入力DTOを構築
-        filter_input = ScreenerFilterInput(
+        repo = PostgresCANSLIMStockRepository(db)
+
+        criteria = ScreeningCriteria(
+            min_rs_rating=min_rs_rating,
+            min_canslim_score=min_canslim_score,
+            min_eps_growth_quarterly=Decimal(str(min_eps_growth_quarterly)),
+            min_eps_growth_annual=Decimal(str(min_eps_growth_annual)),
+            max_distance_from_high=Decimal(str(max_distance_from_52w_high)),
+            min_volume_ratio=Decimal(str(min_volume_ratio)),
+        )
+
+        stocks = repo.find_by_criteria(
+            target_date=date.today(),
+            criteria=criteria,
+            limit=limit,
+            offset=offset,
+        )
+
+        stocks_schema = [_stock_to_summary(stock) for stock in stocks]
+
+        filter_schema = ScreenerFilterSchema(
             min_rs_rating=min_rs_rating,
             min_eps_growth_quarterly=min_eps_growth_quarterly,
             min_eps_growth_annual=min_eps_growth_annual,
             max_distance_from_52w_high=max_distance_from_52w_high,
             min_volume_ratio=min_volume_ratio,
             min_canslim_score=min_canslim_score,
-            limit=limit,
-            offset=offset,
-        )
-
-        # ユースケース実行
-        result = await use_case.execute(filter_input)
-
-        # レスポンススキーマに変換
-        stocks_schema = [
-            StockSummarySchema(
-                symbol=stock.symbol,
-                name=stock.name,
-                price=stock.price,
-                change_percent=stock.change_percent,
-                rs_rating=stock.rs_rating,
-                canslim_score=stock.canslim_score,
-                volume_ratio=stock.volume_ratio,
-                distance_from_52w_high=stock.distance_from_52w_high,
-            )
-            for stock in result.stocks
-        ]
-
-        filter_schema = ScreenerFilterSchema(
-            min_rs_rating=filter_input.min_rs_rating,
-            min_eps_growth_quarterly=filter_input.min_eps_growth_quarterly,
-            min_eps_growth_annual=filter_input.min_eps_growth_annual,
-            max_distance_from_52w_high=filter_input.max_distance_from_52w_high,
-            min_volume_ratio=filter_input.min_volume_ratio,
-            min_canslim_score=filter_input.min_canslim_score,
         )
 
         response = ScreenerResponse(
-            total_count=result.total_count,
+            total_count=len(stocks_schema),
             stocks=stocks_schema,
             filter_applied=filter_schema,
-            screened_at=result.screened_at,
+            screened_at=datetime.now(),
         )
 
         return ApiResponse(success=True, data=response)
@@ -125,102 +235,26 @@ async def screen_canslim_stocks(
     summary="銘柄詳細取得",
     description="個別銘柄の詳細情報（CAN-SLIMスコア含む）を取得する",
 )
-async def get_stock_detail(
+def get_stock_detail(
     symbol: str,
-    use_case: GetStockDetailUseCase = Depends(get_stock_detail_use_case),
+    db: Session = Depends(get_db),
 ) -> ApiResponse[StockDetailSchema]:
     """銘柄詳細を取得"""
     try:
-        # 入力DTOを構築
-        input_dto = StockDetailInput(symbol=symbol.upper())
+        repo = PostgresCANSLIMStockRepository(db)
 
-        # ユースケース実行
-        result = await use_case.execute(input_dto)
+        stock = repo.find_by_symbol_and_date(
+            symbol=symbol.upper(),
+            target_date=date.today(),
+        )
 
-        if result is None:
+        if stock is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"Stock not found: {symbol}",
             )
 
-        # CAN-SLIMスコアをスキーマに変換
-        canslim_schema = None
-        if result.canslim_score is not None:
-            cs = result.canslim_score
-            canslim_schema = CANSLIMScoreSchema(
-                total_score=cs.total_score,
-                overall_grade=cs.overall_grade,
-                passing_count=cs.passing_count,
-                c_score=CANSLIMCriteriaSchema(
-                    name=cs.c_score.name,
-                    score=cs.c_score.score,
-                    grade=cs.c_score.grade,
-                    value=cs.c_score.value,
-                    threshold=cs.c_score.threshold,
-                    description=cs.c_score.description,
-                ),
-                a_score=CANSLIMCriteriaSchema(
-                    name=cs.a_score.name,
-                    score=cs.a_score.score,
-                    grade=cs.a_score.grade,
-                    value=cs.a_score.value,
-                    threshold=cs.a_score.threshold,
-                    description=cs.a_score.description,
-                ),
-                n_score=CANSLIMCriteriaSchema(
-                    name=cs.n_score.name,
-                    score=cs.n_score.score,
-                    grade=cs.n_score.grade,
-                    value=cs.n_score.value,
-                    threshold=cs.n_score.threshold,
-                    description=cs.n_score.description,
-                ),
-                s_score=CANSLIMCriteriaSchema(
-                    name=cs.s_score.name,
-                    score=cs.s_score.score,
-                    grade=cs.s_score.grade,
-                    value=cs.s_score.value,
-                    threshold=cs.s_score.threshold,
-                    description=cs.s_score.description,
-                ),
-                l_score=CANSLIMCriteriaSchema(
-                    name=cs.l_score.name,
-                    score=cs.l_score.score,
-                    grade=cs.l_score.grade,
-                    value=cs.l_score.value,
-                    threshold=cs.l_score.threshold,
-                    description=cs.l_score.description,
-                ),
-                i_score=CANSLIMCriteriaSchema(
-                    name=cs.i_score.name,
-                    score=cs.i_score.score,
-                    grade=cs.i_score.grade,
-                    value=cs.i_score.value,
-                    threshold=cs.i_score.threshold,
-                    description=cs.i_score.description,
-                ),
-            )
-
-        # レスポンススキーマに変換
-        response = StockDetailSchema(
-            symbol=result.symbol,
-            name=result.name,
-            price=result.price,
-            change=result.change,
-            change_percent=result.change_percent,
-            volume=result.volume,
-            avg_volume=result.avg_volume,
-            market_cap=result.market_cap,
-            pe_ratio=result.pe_ratio,
-            week_52_high=result.week_52_high,
-            week_52_low=result.week_52_low,
-            eps_growth_quarterly=result.eps_growth_quarterly,
-            eps_growth_annual=result.eps_growth_annual,
-            rs_rating=result.rs_rating,
-            institutional_ownership=result.institutional_ownership,
-            canslim_score=canslim_schema,
-            updated_at=result.updated_at,
-        )
+        response = _stock_to_detail(stock)
 
         return ApiResponse(success=True, data=response)
 

@@ -4,10 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.application.use_cases.data.get_financial_metrics import (
-    GetFinancialMetricsUseCase,
-)
-from src.application.interfaces.financial_data_gateway import (
+from src.infrastructure.gateways.financial_data_gateway import (
     QuoteData,
     HistoricalBar,
 )
@@ -24,11 +21,6 @@ router = APIRouter(prefix="/data", tags=["data"])
 
 # Gateway インスタンス
 gateway = YFinanceGateway()
-
-# UseCase インスタンス
-get_financial_metrics_use_case = GetFinancialMetricsUseCase(
-    financial_gateway=gateway,
-)
 
 
 def _quote_to_response(quote: QuoteData) -> QuoteResponse:
@@ -127,15 +119,9 @@ async def get_history(
     description="指定したシンボルの財務指標（EPS成長率、ROE等）を取得する",
 )
 async def get_financials(symbol: str) -> ApiResponse[FinancialsResponse]:
-    """
-    財務指標を取得
-
-    UseCase経由でGatewayから生データを取得し、
-    Domain層のEPSGrowthCalculatorで成長率を計算する。
-    """
+    """財務指標を取得"""
     try:
-        # UseCaseを使用して財務指標を取得
-        metrics = await get_financial_metrics_use_case.execute(symbol)
+        metrics = await gateway.get_financial_metrics(symbol)
 
         if metrics is None:
             raise HTTPException(

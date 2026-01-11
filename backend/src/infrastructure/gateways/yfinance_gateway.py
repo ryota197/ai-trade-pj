@@ -4,7 +4,7 @@ from datetime import datetime
 
 import yfinance as yf
 
-from src.application.interfaces.financial_data_gateway import (
+from src.infrastructure.gateways.financial_data_gateway import (
     FinancialDataGateway,
     FinancialMetrics,
     HistoricalBar,
