@@ -11,8 +11,6 @@ from src.application.interfaces.financial_data_gateway import (
     QuoteData,
     RawFinancialData,
 )
-from src.domain.models import HistoricalPrice, Quote
-from src.domain.services.eps_growth_calculator import EPSData, EPSGrowthCalculator
 
 
 class YFinanceGateway(FinancialDataGateway):
@@ -178,41 +176,36 @@ class YFinanceGateway(FinancialDataGateway):
 
     async def get_financial_metrics(self, symbol: str) -> FinancialMetrics | None:
         """
-        財務指標を取得（計算済み）
+        財務指標を取得
 
         Args:
             symbol: ティッカーシンボル
 
         Returns:
             FinancialMetrics: 財務指標、取得失敗時はNone
-
-        Deprecated:
-            このメソッドはInfrastructure層でEPS計算を行うため非推奨。
-            get_raw_financials() + EPSGrowthCalculator を使用してください。
         """
-        # 生データを取得
-        raw = await self.get_raw_financials(symbol)
-        if raw is None:
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+
+            if not info:
+                return None
+
+            return FinancialMetrics(
+                symbol=symbol.upper(),
+                eps_ttm=info.get("trailingEps"),
+                eps_growth_quarterly=self._to_percent(info.get("earningsQuarterlyGrowth")),
+                eps_growth_annual=self._to_percent(info.get("earningsGrowth")),
+                revenue_growth=self._to_percent(info.get("revenueGrowth")),
+                profit_margin=self._to_percent(info.get("profitMargins")),
+                roe=self._to_percent(info.get("returnOnEquity")),
+                debt_to_equity=info.get("debtToEquity"),
+                institutional_ownership=self._to_percent(
+                    info.get("heldPercentInstitutions")
+                ),
+            )
+        except Exception:
             return None
-
-        # Domain層のCalculatorでEPS成長率を計算
-        eps_data = EPSData(
-            quarterly_eps=raw.quarterly_eps,
-            annual_eps=raw.annual_eps,
-        )
-        eps_result = EPSGrowthCalculator.calculate(eps_data)
-
-        return FinancialMetrics(
-            symbol=raw.symbol,
-            eps_ttm=raw.eps_ttm,
-            eps_growth_quarterly=eps_result.quarterly_growth,
-            eps_growth_annual=eps_result.annual_growth,
-            revenue_growth=raw.revenue_growth,
-            profit_margin=raw.profit_margin,
-            roe=raw.roe,
-            debt_to_equity=raw.debt_to_equity,
-            institutional_ownership=raw.institutional_ownership,
-        )
 
     async def get_sp500_history(
         self,
@@ -230,94 +223,6 @@ class YFinanceGateway(FinancialDataGateway):
             list[HistoricalBar]: 株価バーのリスト
         """
         return await self.get_price_history(self.SP500_SYMBOL, period, interval)
-
-    # ========================================
-    # レガシーメソッド（後方互換性のため維持）
-    # ========================================
-
-    def get_quote_sync(self, symbol: str) -> Quote:
-        """
-        現在の株価データを取得（同期版・レガシー）
-
-        Args:
-            symbol: ティッカーシンボル（例: "AAPL"）
-
-        Returns:
-            Quote: 株価エンティティ
-
-        Raises:
-            ValueError: シンボルが無効な場合
-
-        Deprecated:
-            新規コードでは get_quote() を使用してください
-        """
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-
-        if not info or info.get("regularMarketPrice") is None:
-            raise ValueError(f"Invalid symbol: {symbol}")
-
-        price = info.get("regularMarketPrice", 0)
-        previous_close = info.get("previousClose", price)
-        change = price - previous_close
-        change_percent = (change / previous_close * 100) if previous_close else 0
-
-        return Quote(
-            symbol=symbol.upper(),
-            price=price,
-            change=round(change, 2),
-            change_percent=round(change_percent, 2),
-            volume=info.get("regularMarketVolume", 0),
-            market_cap=info.get("marketCap"),
-            pe_ratio=info.get("trailingPE"),
-            week_52_high=info.get("fiftyTwoWeekHigh"),
-            week_52_low=info.get("fiftyTwoWeekLow"),
-            timestamp=datetime.now(),
-        )
-
-    def get_history_sync(
-        self,
-        symbol: str,
-        period: str = "1mo",
-        interval: str = "1d",
-    ) -> list[HistoricalPrice]:
-        """
-        過去の株価データを取得（同期版・レガシー）
-
-        Args:
-            symbol: ティッカーシンボル
-            period: 期間
-            interval: 間隔
-
-        Returns:
-            list[HistoricalPrice]: 過去の株価データリスト
-
-        Raises:
-            ValueError: シンボルが無効またはデータがない場合
-
-        Deprecated:
-            新規コードでは get_price_history() を使用してください
-        """
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=period, interval=interval)
-
-        if hist.empty:
-            raise ValueError(f"No history data for symbol: {symbol}")
-
-        result = []
-        for date, row in hist.iterrows():
-            result.append(
-                HistoricalPrice(
-                    date=date.to_pydatetime(),
-                    open=round(row["Open"], 2),
-                    high=round(row["High"], 2),
-                    low=round(row["Low"], 2),
-                    close=round(row["Close"], 2),
-                    volume=int(row["Volume"]),
-                )
-            )
-
-        return result
 
     # ========================================
     # プライベートメソッド

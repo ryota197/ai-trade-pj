@@ -64,6 +64,17 @@ class CloseTradeInput:
     exit_price: Decimal
 
 
+@dataclass(frozen=True)
+class TradeFilterInput:
+    """トレード一覧取得 入力DTO"""
+
+    status: str | None = None  # open, closed
+    trade_type: str | None = None  # buy, sell
+    symbol: str | None = None
+    limit: int = 100
+    offset: int = 0
+
+
 # ============================================================
 # ウォッチリスト 出力DTO
 # ============================================================
@@ -142,6 +153,19 @@ class OpenPositionOutput:
     current_price: Decimal | None = None
     unrealized_pnl: Decimal | None = None
     unrealized_pnl_percent: Decimal | None = None
+
+
+# ============================================================
+# パフォーマンス 入力DTO
+# ============================================================
+
+
+@dataclass(frozen=True)
+class PerformanceInput:
+    """パフォーマンス取得 入力DTO"""
+
+    start_date: datetime | None = None
+    end_date: datetime | None = None
 
 
 # ============================================================
