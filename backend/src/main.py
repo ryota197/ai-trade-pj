@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config import get_settings
 from src.presentation.api import (
     admin_controller,
-    data_controller,
     health_controller,
     market_controller,
     portfolio_controller,
@@ -36,7 +35,6 @@ app.add_middleware(
 
 # ルーター登録
 app.include_router(health_controller.router, prefix=settings.api_prefix)
-app.include_router(data_controller.router, prefix=settings.api_prefix)
 app.include_router(market_controller.router, prefix=settings.api_prefix)
 app.include_router(screener_controller.router, prefix=settings.api_prefix)
 app.include_router(portfolio_controller.router, prefix=settings.api_prefix)

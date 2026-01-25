@@ -6,12 +6,6 @@ from src.presentation.schemas.market import (
     MarketIndicatorsResponse,
     MarketStatusResponse,
 )
-from src.presentation.schemas.quote import (
-    FinancialsResponse,
-    HistoryItem,
-    HistoryResponse,
-    QuoteResponse,
-)
 from src.presentation.schemas.screener import (
     CANSLIMCriteriaSchema,
     CANSLIMScoreSchema,
@@ -30,11 +24,6 @@ __all__ = [
     # Market
     "MarketStatusResponse",
     "MarketIndicatorsResponse",
-    # Quote/Data
-    "QuoteResponse",
-    "HistoryItem",
-    "HistoryResponse",
-    "FinancialsResponse",
     # Screener
     "CANSLIMCriteriaSchema",
     "CANSLIMScoreSchema",

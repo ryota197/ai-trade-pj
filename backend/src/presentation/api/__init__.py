@@ -2,7 +2,6 @@
 
 from src.presentation.api import (
     admin_controller,
-    data_controller,
     health_controller,
     market_controller,
     portfolio_controller,
@@ -11,7 +10,6 @@ from src.presentation.api import (
 
 __all__ = [
     "admin_controller",
-    "data_controller",
     "health_controller",
     "market_controller",
     "portfolio_controller",
