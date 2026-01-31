@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from src.adapters.database import get_db
 from src.jobs.flows.refresh_screener import RefreshScreenerFlow
-from src.jobs.lib import FlowExecutionRepository, JobExecutionRepository
 from src.queries import FlowExecutionQuery, JobExecutionQuery
 from src.presentation.dependencies import get_refresh_screener_flow
 from src.presentation.schemas.admin import (
@@ -23,13 +22,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
 
-def get_flow_repository(db: Session = Depends(get_db)) -> FlowExecutionRepository:
-    """FlowExecutionRepository の依存性解決"""
+def get_flow_query(db: Session = Depends(get_db)) -> FlowExecutionQuery:
+    """FlowExecutionQuery の依存性解決"""
     return FlowExecutionQuery(db)
 
 
-def get_job_repository(db: Session = Depends(get_db)) -> JobExecutionRepository:
-    """JobExecutionRepository の依存性解決"""
+def get_job_query(db: Session = Depends(get_db)) -> JobExecutionQuery:
+    """JobExecutionQuery の依存性解決"""
     return JobExecutionQuery(db)
 
 
@@ -83,21 +82,21 @@ async def start_refresh(
 )
 async def get_flow_status(
     flow_id: str,
-    flow_repo: FlowExecutionRepository = Depends(get_flow_repository),
-    job_repo: JobExecutionRepository = Depends(get_job_repository),
+    flow_query: FlowExecutionQuery = Depends(get_flow_query),
+    job_query: JobExecutionQuery = Depends(get_job_query),
 ) -> ApiResponse[FlowStatusResponse]:
     """フローの進捗状況を取得"""
     try:
-        flow = flow_repo.get_by_id(flow_id)
+        flow = flow_query.get_by_id(flow_id)
         if flow is None:
             raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
 
-        jobs = job_repo.get_by_flow_id(flow_id)
+        jobs = job_query.get_by_flow_id(flow_id)
 
         response = FlowStatusResponse(
             flow_id=flow.flow_id,
             flow_name=flow.flow_name,
-            status=flow.status.value,
+            status=flow.status,
             total_jobs=flow.total_jobs,
             completed_jobs=flow.completed_jobs,
             current_job=flow.current_job,
@@ -106,7 +105,7 @@ async def get_flow_status(
             jobs=[
                 JobExecutionSchema(
                     job_name=job.job_name,
-                    status=job.status.value,
+                    status=job.status,
                     started_at=job.started_at,
                     completed_at=job.completed_at,
                     error_message=job.error_message,
@@ -131,21 +130,21 @@ async def get_flow_status(
 )
 async def get_latest_flows(
     limit: int = 10,
-    flow_repo: FlowExecutionRepository = Depends(get_flow_repository),
-    job_repo: JobExecutionRepository = Depends(get_job_repository),
+    flow_query: FlowExecutionQuery = Depends(get_flow_query),
+    job_query: JobExecutionQuery = Depends(get_job_query),
 ) -> ApiResponse[list[FlowStatusResponse]]:
     """最新のフロー実行一覧を取得"""
     try:
-        flows = flow_repo.get_latest(limit=limit)
+        flows = flow_query.get_latest(limit=limit)
 
         responses = []
         for flow in flows:
-            jobs = job_repo.get_by_flow_id(flow.flow_id)
+            jobs = job_query.get_by_flow_id(flow.flow_id)
             responses.append(
                 FlowStatusResponse(
                     flow_id=flow.flow_id,
                     flow_name=flow.flow_name,
-                    status=flow.status.value,
+                    status=flow.status,
                     total_jobs=flow.total_jobs,
                     completed_jobs=flow.completed_jobs,
                     current_job=flow.current_job,
@@ -154,7 +153,7 @@ async def get_latest_flows(
                     jobs=[
                         JobExecutionSchema(
                             job_name=job.job_name,
-                            status=job.status.value,
+                            status=job.status,
                             started_at=job.started_at,
                             completed_at=job.completed_at,
                             error_message=job.error_message,

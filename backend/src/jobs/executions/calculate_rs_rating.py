@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
-from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
-from src.domain.services.rs_rating_calculator import RSRatingCalculator
+from src.queries import CANSLIMStockQuery
+from src.services import RSRatingCalculator
 from src.jobs.executions.base import Job
 
 
@@ -47,10 +47,10 @@ class CalculateRSRatingJob(Job[CalculateRSRatingInput, CalculateRSRatingOutput])
 
     def __init__(
         self,
-        stock_repository: CANSLIMStockRepository,
+        stock_query: CANSLIMStockQuery,
         rs_rating_calculator: RSRatingCalculator | None = None,
     ) -> None:
-        self._stock_repo = stock_repository
+        self._stock_query = stock_query
         self._calculator = rs_rating_calculator or RSRatingCalculator()
 
     async def execute(
@@ -63,7 +63,7 @@ class CalculateRSRatingJob(Job[CalculateRSRatingInput, CalculateRSRatingOutput])
             target_date = date.today()
 
         # 1. relative_strength 計算済みの全銘柄を取得
-        stocks = self._stock_repo.find_all_with_relative_strength(target_date)
+        stocks = self._stock_query.find_all_with_relative_strength(target_date)
 
         if not stocks:
             return CalculateRSRatingOutput(
@@ -83,7 +83,7 @@ class CalculateRSRatingJob(Job[CalculateRSRatingInput, CalculateRSRatingOutput])
         rs_ratings = self._calculator.calculate_ratings(relative_strengths)
 
         # 4. 一括更新
-        self._stock_repo.update_rs_ratings(target_date, rs_ratings)
+        self._stock_query.update_rs_ratings(target_date, rs_ratings)
 
         return CalculateRSRatingOutput(
             total_stocks=len(stocks),

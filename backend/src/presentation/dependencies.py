@@ -3,17 +3,13 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from src.infrastructure.database.connection import get_db
-from src.infrastructure.gateways.symbol_provider import StaticSymbolProvider
-from src.infrastructure.gateways.yfinance_gateway import YFinanceGateway
-from src.infrastructure.repositories.postgres_canslim_stock_repository import (
-    PostgresCANSLIMStockRepository,
-)
-from src.infrastructure.repositories.postgres_flow_execution_repository import (
-    PostgresFlowExecutionRepository,
-)
-from src.infrastructure.repositories.postgres_job_execution_repository import (
-    PostgresJobExecutionRepository,
+from src.adapters.database import get_db
+from src.adapters.symbol_provider import StaticSymbolProvider
+from src.adapters.yfinance import YFinanceGateway
+from src.queries import (
+    CANSLIMStockQuery,
+    FlowExecutionQuery,
+    JobExecutionQuery,
 )
 from src.jobs.executions.calculate_canslim import CalculateCANSLIMJob
 from src.jobs.executions.calculate_rs_rating import CalculateRSRatingJob
@@ -37,26 +33,26 @@ def get_refresh_screener_flow(
     Returns:
         RefreshScreenerFlow: スクリーナーデータ更新フロー
     """
-    stock_repo = PostgresCANSLIMStockRepository(db)
-    flow_repo = PostgresFlowExecutionRepository(db)
-    job_repo = PostgresJobExecutionRepository(db)
+    stock_query = CANSLIMStockQuery(db)
+    flow_query = FlowExecutionQuery(db)
+    job_query = JobExecutionQuery(db)
     financial_gateway = YFinanceGateway()
     symbol_provider = StaticSymbolProvider()
 
     # Job 1: データ収集
     collect_job = CollectStockDataJob(
-        stock_repository=stock_repo,
+        stock_query=stock_query,
         financial_gateway=financial_gateway,
     )
 
     # Job 2: RS Rating計算
     rs_rating_job = CalculateRSRatingJob(
-        stock_repository=stock_repo,
+        stock_query=stock_query,
     )
 
     # Job 3: CAN-SLIMスコア計算
     canslim_job = CalculateCANSLIMJob(
-        stock_repository=stock_repo,
+        stock_query=stock_query,
     )
 
     return RefreshScreenerFlow(
@@ -64,6 +60,6 @@ def get_refresh_screener_flow(
         rs_rating_job=rs_rating_job,
         canslim_job=canslim_job,
         symbol_provider=symbol_provider,
-        flow_repository=flow_repo,
-        job_repository=job_repo,
+        flow_query=flow_query,
+        job_query=job_query,
     )

@@ -4,10 +4,11 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from src.infrastructure.gateways.financial_data_gateway import FinancialDataGateway
-from src.domain.models.canslim_stock import CANSLIMStock
-from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
-from src.domain.services.rs_calculator import PriceBar, RSCalculator
+from src.adapters.yfinance import YFinanceGateway
+from src.models import CANSLIMStock
+from src.queries import CANSLIMStockQuery
+from src.services import RSCalculator
+from src.services.rs_calculator import PriceBar
 from src.jobs.executions.base import Job
 
 
@@ -50,11 +51,11 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
 
     def __init__(
         self,
-        stock_repository: CANSLIMStockRepository,
-        financial_gateway: FinancialDataGateway,
+        stock_query: CANSLIMStockQuery,
+        financial_gateway: YFinanceGateway,
         rs_calculator: RSCalculator | None = None,
     ) -> None:
-        self._stock_repo = stock_repository
+        self._stock_query = stock_query
         self._gateway = financial_gateway
         self._rs_calculator = rs_calculator or RSCalculator()
 
@@ -156,4 +157,4 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
             updated_at=datetime.now(timezone.utc),
         )
 
-        self._stock_repo.save(stock)
+        self._stock_query.save(stock)

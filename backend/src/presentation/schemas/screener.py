@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from src.domain.constants import CANSLIMDefaults
+from src.services.constants import CANSLIMDefaults
 
 # 定数エイリアス
 _D = CANSLIMDefaults

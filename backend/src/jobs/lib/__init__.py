@@ -3,22 +3,10 @@
 from src.jobs.lib.models import (
     FlowStatus,
     JobStatus,
-    FlowExecution,
-    JobExecution,
-)
-from src.jobs.lib.repositories import (
-    FlowExecutionRepository,
-    JobExecutionRepository,
 )
 
 __all__ = [
-    # Status Enums
+    # Status Enums (レガシー互換)
     "FlowStatus",
     "JobStatus",
-    # Execution Entities
-    "FlowExecution",
-    "JobExecution",
-    # Repositories
-    "FlowExecutionRepository",
-    "JobExecutionRepository",
 ]

@@ -1,12 +1,12 @@
 """ジョブ実行 モデル"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.infrastructure.database.connection import Base
+from src.adapters.database import Base
 
 
 class JobExecution(Base):
@@ -42,6 +42,37 @@ class JobExecution(Base):
     # 結果
     result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # === エンティティメソッド ===
+
+    def start(self) -> None:
+        """ジョブ開始"""
+        self.status = "running"
+        self.started_at = datetime.now(timezone.utc)
+
+    def complete(self, result: dict | None = None) -> None:
+        """ジョブ完了"""
+        self.status = "completed"
+        self.completed_at = datetime.now(timezone.utc)
+        self.result = result
+
+    def fail(self, error_message: str) -> None:
+        """ジョブ失敗"""
+        self.status = "failed"
+        self.completed_at = datetime.now(timezone.utc)
+        self.error_message = error_message
+
+    def skip(self) -> None:
+        """ジョブスキップ"""
+        self.status = "skipped"
+
+    @property
+    def duration_seconds(self) -> float | None:
+        """実行時間（秒）"""
+        if self.started_at is None:
+            return None
+        end = self.completed_at or datetime.now(timezone.utc)
+        return (end - self.started_at).total_seconds()
 
     def __repr__(self) -> str:
         return (

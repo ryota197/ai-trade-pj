@@ -4,10 +4,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from src.domain.models.market_snapshot import MarketCondition
-from src.domain.repositories.canslim_stock_repository import CANSLIMStockRepository
-from src.domain.repositories.market_snapshot_repository import MarketSnapshotRepository
-from src.domain.services.canslim_scorer import CANSLIMScorer
+from src.queries import CANSLIMStockQuery, MarketSnapshotQuery
+from src.services import CANSLIMScorer
+from src.services._lib import MarketCondition
 from src.jobs.executions.base import Job
 
 
@@ -51,12 +50,12 @@ class CalculateCANSLIMJob(Job[CalculateCANSLIMInput, CalculateCANSLIMOutput]):
 
     def __init__(
         self,
-        stock_repository: CANSLIMStockRepository,
-        market_repository: MarketSnapshotRepository | None = None,
+        stock_query: CANSLIMStockQuery,
+        market_query: MarketSnapshotQuery | None = None,
         canslim_scorer: CANSLIMScorer | None = None,
     ) -> None:
-        self._stock_repo = stock_repository
-        self._market_repo = market_repository
+        self._stock_query = stock_query
+        self._market_query = market_query
         self._scorer = canslim_scorer or CANSLIMScorer()
 
     async def execute(
@@ -74,7 +73,7 @@ class CalculateCANSLIMJob(Job[CalculateCANSLIMInput, CalculateCANSLIMOutput]):
         market_condition = self._get_market_condition(input_)
 
         # 1. 当日分の全銘柄データを取得（rs_rating が設定済みのもの）
-        stocks = self._stock_repo.find_all_by_date(target_date)
+        stocks = self._stock_query.find_all_by_date(target_date)
         stocks_with_rs = [s for s in stocks if s.rs_rating is not None]
 
         if not stocks_with_rs:
@@ -105,7 +104,7 @@ class CalculateCANSLIMJob(Job[CalculateCANSLIMInput, CalculateCANSLIMOutput]):
 
         # 3. 一括更新
         if scores:
-            self._stock_repo.update_canslim_scores(target_date, scores)
+            self._stock_query.update_canslim_scores(target_date, scores)
 
         return CalculateCANSLIMOutput(
             total_stocks=len(stocks_with_rs),
@@ -122,11 +121,11 @@ class CalculateCANSLIMJob(Job[CalculateCANSLIMInput, CalculateCANSLIMOutput]):
         if input_ and input_.market_condition:
             return input_.market_condition
 
-        # リポジトリから取得
-        if self._market_repo:
-            snapshot = self._market_repo.find_latest()
+        # クエリから取得
+        if self._market_query:
+            snapshot = self._market_query.find_latest()
             if snapshot:
-                return snapshot.condition
+                return MarketCondition(snapshot.condition)
 
         # デフォルトはNEUTRAL
         return MarketCondition.NEUTRAL

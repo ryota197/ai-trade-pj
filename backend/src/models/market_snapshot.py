@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.infrastructure.database.connection import Base
+from src.adapters.database import Base
 
 
 class MarketSnapshot(Base):

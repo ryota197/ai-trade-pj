@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.infrastructure.database.connection import Base
+from src.adapters.database import Base
 
 
 class FlowExecution(Base):
@@ -43,6 +43,38 @@ class FlowExecution(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    # === エンティティメソッド ===
+
+    def start(self, first_job: str) -> None:
+        """フロー開始"""
+        self.status = "running"
+        self.started_at = datetime.now(timezone.utc)
+        self.current_job = first_job
+
+    def advance(self, next_job: str | None) -> None:
+        """次のジョブへ進む"""
+        self.completed_jobs += 1
+        self.current_job = next_job
+
+    def complete(self) -> None:
+        """フロー完了"""
+        self.status = "completed"
+        self.completed_at = datetime.now(timezone.utc)
+        self.current_job = None
+
+    def fail(self) -> None:
+        """フロー失敗"""
+        self.status = "failed"
+        self.completed_at = datetime.now(timezone.utc)
+
+    @property
+    def duration_seconds(self) -> float | None:
+        """実行時間（秒）"""
+        if self.started_at is None:
+            return None
+        end = self.completed_at or datetime.now(timezone.utc)
+        return (end - self.started_at).total_seconds()
 
     def __repr__(self) -> str:
         return (

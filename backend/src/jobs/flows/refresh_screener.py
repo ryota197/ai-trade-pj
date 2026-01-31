@@ -5,7 +5,9 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from src.infrastructure.gateways.symbol_provider import SymbolProvider
+from src.adapters import SymbolProvider
+from src.models import FlowExecution, JobExecution
+from src.queries import FlowExecutionQuery, JobExecutionQuery
 from src.jobs.executions.calculate_canslim import (
     CalculateCANSLIMInput,
     CalculateCANSLIMJob,
@@ -17,12 +19,6 @@ from src.jobs.executions.calculate_rs_rating import (
 from src.jobs.executions.collect_stock_data import (
     CollectInput,
     CollectStockDataJob,
-)
-from src.jobs.lib import (
-    FlowExecution,
-    FlowExecutionRepository,
-    JobExecution,
-    JobExecutionRepository,
 )
 
 # PoC実装での固定値
@@ -70,15 +66,15 @@ class RefreshScreenerFlow:
         rs_rating_job: CalculateRSRatingJob,
         canslim_job: CalculateCANSLIMJob,
         symbol_provider: SymbolProvider,
-        flow_repository: FlowExecutionRepository,
-        job_repository: JobExecutionRepository,
+        flow_query: FlowExecutionQuery,
+        job_query: JobExecutionQuery,
     ) -> None:
         self.collect_job = collect_job
         self.rs_rating_job = rs_rating_job
         self.canslim_job = canslim_job
         self.symbol_provider = symbol_provider
-        self._flow_repo = flow_repository
-        self._job_repo = job_repository
+        self._flow_query = flow_query
+        self._job_query = job_query
 
     async def run(self) -> FlowResult:
         """
@@ -93,7 +89,7 @@ class RefreshScreenerFlow:
             total_jobs=len(JOB_DEFINITIONS),
         )
         flow.start(first_job=JOB_DEFINITIONS[0])
-        self._flow_repo.create(flow)
+        self._flow_query.create(flow)
 
         # 各ジョブのレコードを事前作成
         jobs = self._create_job_records(flow.flow_id)
@@ -134,12 +130,12 @@ class RefreshScreenerFlow:
 
             # フロー完了
             flow.complete()
-            self._flow_repo.update(flow)
+            self._flow_query.update(flow)
 
         except Exception:
             # フロー失敗を記録
             flow.fail()
-            self._flow_repo.update(flow)
+            self._flow_query.update(flow)
             raise
 
         return FlowResult(
@@ -158,7 +154,7 @@ class RefreshScreenerFlow:
                 flow_id=flow_id,
                 job_name=job_name,
             )
-            self._job_repo.create(job)
+            self._job_query.create(job)
             jobs.append(job)
         return jobs
 
@@ -172,7 +168,7 @@ class RefreshScreenerFlow:
         """単一ジョブを実行し、状態を更新"""
         # ジョブ開始
         job.start()
-        self._job_repo.update(job)
+        self._job_query.update(job)
 
         try:
             # ジョブ実行
@@ -180,16 +176,16 @@ class RefreshScreenerFlow:
 
             # ジョブ完了
             job.complete(result=self._to_result_dict(result))
-            self._job_repo.update(job)
+            self._job_query.update(job)
 
             # フロー進捗更新
             flow.advance(next_job=next_job)
-            self._flow_repo.update(flow)
+            self._flow_query.update(flow)
 
         except Exception as e:
             # ジョブ失敗
             job.fail(error_message=str(e))
-            self._job_repo.update(job)
+            self._job_query.update(job)
             raise
 
     def _to_result_dict(self, result: Any) -> dict:
