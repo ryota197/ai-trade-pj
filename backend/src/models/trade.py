@@ -1,11 +1,27 @@
 """Trade モデル"""
 
 from datetime import datetime, timezone
+from enum import Enum
 
 from sqlalchemy import DateTime, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.connection import Base
+
+
+class TradeType(Enum):
+    """トレードタイプ"""
+
+    BUY = "buy"
+    SELL = "sell"
+
+
+class TradeStatus(Enum):
+    """トレードステータス"""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
 
 
 class Trade(Base):

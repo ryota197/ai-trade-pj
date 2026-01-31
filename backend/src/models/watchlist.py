@@ -1,11 +1,21 @@
 """ウォッチリスト モデル"""
 
 from datetime import datetime, timezone
+from enum import Enum
 
 from sqlalchemy import DateTime, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.connection import Base
+
+
+class WatchlistStatus(Enum):
+    """ウォッチリストステータス"""
+
+    WATCHING = "watching"
+    TRIGGERED = "triggered"
+    EXPIRED = "expired"
+    REMOVED = "removed"
 
 
 class Watchlist(Base):
