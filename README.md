@@ -11,6 +11,7 @@ CAN-SLIM投資手法を支援するHybrid Analyzerアプリケーション。
 - **Market Module**: マーケット状態（Risk On/Off/Neutral）の判定・可視化
 - **Screener Module**: CAN-SLIM条件に基づく銘柄スクリーニング
 - **Portfolio Module**: ウォッチリスト管理、ペーパートレード記録
+- **Admin Module**: スクリーニングデータの更新・ジョブ管理
 
 ## 技術スタック
 
@@ -19,9 +20,9 @@ CAN-SLIM投資手法を支援するHybrid Analyzerアプリケーション。
 | Frontend | Next.js 14, TypeScript, TailwindCSS |
 | Backend | Python 3.11+, FastAPI, SQLAlchemy 2.x |
 | Database | PostgreSQL 16 |
-| External | yfinance, FMP API |
+| External | yfinance |
 
-## セットアップ
+## クイックスタート
 
 ### 必要環境
 
@@ -58,25 +59,8 @@ docker compose ps
 DB接続確認:
 ```bash
 docker compose exec postgres psql -U trader -d trading -c "\dt"
-# 6つのテーブルが表示されれば成功
+# テーブルが表示されれば成功
 ```
-
-### pgAdmin（DB管理ツール）
-
-ブラウザでDBを確認・操作できます。
-
-1. http://localhost:5050 にアクセス
-2. ログイン
-   - Email: `admin@local.dev`
-   - Password: `admin`
-3. サーバー追加（Add New Server）
-   - **General** > Name: `trading`（任意）
-   - **Connection**:
-     - Host: `postgres`
-     - Port: `5432`
-     - Database: `trading`
-     - Username: `trader`
-     - Password: `localdev`
 
 ### 4. Backend起動
 
@@ -102,6 +86,100 @@ npm run dev
 
 ---
 
+## 動作確認
+
+### スクリーニングデータの更新（管理画面）
+
+管理画面からS&P 500銘柄のスクリーニングデータを更新できます。
+
+1. **全サービス起動**（PostgreSQL, Backend, Frontend）
+
+2. **管理画面にアクセス**
+   ```
+   http://localhost:3000/admin/screener
+   ```
+
+3. **「更新開始」ボタンをクリック**
+   - Job 1: データ収集（yfinance APIから株価・財務データ取得）
+   - Job 2: RS Rating計算（パーセンタイルランキング）
+   - Job 3: CAN-SLIMスコア計算
+
+4. **進捗確認**
+   - 画面上で各ジョブの進捗がリアルタイム表示
+   - 完了まで数分かかります（500銘柄 × API呼び出し）
+
+### APIエンドポイント確認
+
+| エンドポイント | 説明 |
+|---------------|------|
+| `GET /api/health` | ヘルスチェック |
+| `GET /api/market/status` | マーケット状態 |
+| `GET /api/screener/canslim` | CAN-SLIMスクリーニング結果 |
+| `POST /api/admin/screener/refresh` | データ更新開始 |
+| `GET /api/admin/screener/refresh/latest` | 最新フロー一覧 |
+
+Swagger UI: http://localhost:8000/api/docs
+
+---
+
+## アーキテクチャ
+
+### Backend（シンプル5層アーキテクチャ）
+
+```
+backend/src/
+├── models/           # ORM モデル（テーブル定義）
+├── services/         # ビジネスロジック（計算処理）
+├── queries/          # データアクセス（CRUD操作）
+├── adapters/         # 外部連携（DB接続、yfinance）
+├── presentation/     # API層（コントローラ、スキーマ）
+├── jobs/             # バッチ処理（ジョブ、フロー）
+├── main.py
+└── config.py
+```
+
+#### 層の役割
+
+| 層 | 役割 | 例 |
+|----|------|-----|
+| models/ | テーブル構造 + エンティティメソッド | CANSLIMStock, FlowExecution |
+| services/ | ビジネスロジック、計算 | RSCalculator, CANSLIMScorer |
+| queries/ | DBクエリ | CANSLIMStockQuery |
+| adapters/ | 外部システム接続 | YFinanceGateway, database |
+| presentation/ | APIエンドポイント | controllers/, schemas/ |
+| jobs/ | バックグラウンド処理 | RefreshScreenerFlow |
+
+#### 依存関係
+
+```
+presentation ──> queries ──> models
+      │              ↓
+      │          adapters
+      ↓
+   services ──────> models
+      │
+   jobs ───────────────┘
+```
+
+詳細: [docs/poc/architectures/service-components.md](docs/poc/architectures/service-components.md)
+
+### Frontend
+
+```
+frontend/src/
+├── app/              # App Router（ページ）
+│   ├── admin/        # 管理画面
+│   ├── screener/     # スクリーナー
+│   ├── portfolio/    # ポートフォリオ
+│   └── api/          # API Routes（Backend proxy）
+├── components/       # 共通UIコンポーネント
+├── hooks/            # カスタムフック
+├── lib/              # ユーティリティ
+└── types/            # 型定義
+```
+
+---
+
 ## DBマイグレーション
 
 PoCではマイグレーションツールを使用せず、init.sqlを直接編集する方式を採用。
@@ -110,7 +188,7 @@ PoCではマイグレーションツールを使用せず、init.sqlを直接編
 
 ```bash
 # 1. init.sql を編集
-vim backend/src/infrastructure/database/init.sql
+vim docker/postgres/init.sql
 
 # 2. 既存のコンテナ・ボリュームを削除（データも削除される）
 docker compose down -v
@@ -122,91 +200,39 @@ docker compose up -d
 docker compose exec postgres psql -U trader -d trading -c "\dt"
 ```
 
-### データを保持したい場合
-
-```bash
-# 1. 既存データをバックアップ
-docker compose exec postgres pg_dump -U trader trading > backup.sql
-
-# 2. 手動でALTER TABLE等を実行
-docker compose exec postgres psql -U trader -d trading
-
-# psql内で実行
-ALTER TABLE stocks ADD COLUMN new_column VARCHAR(50);
-\q
-```
-
 ### テーブル一覧
 
 | テーブル | 説明 |
 |---------|------|
-| stocks | 銘柄データ（CAN-SLIM指標含む） |
+| canslim_stocks | CAN-SLIM銘柄データ |
 | market_snapshots | マーケット状態の履歴 |
 | watchlist | ウォッチリスト |
-| paper_trades | ペーパートレード記録 |
-| price_cache | 株価キャッシュ |
+| trades | トレード記録 |
+| flow_executions | フロー実行履歴 |
 | job_executions | ジョブ実行履歴 |
 
-詳細: [DB設計](docs/poc/architectures/database-design.md)
+詳細: [docs/poc/architectures/database-design.md](docs/poc/architectures/database-design.md)
 
 ---
 
-## ディレクトリ構成
+## pgAdmin（DB管理ツール）
 
-```
-ai-trade-app/
-├── docker-compose.yml
-├── .env.example
-├── docs/                    # ドキュメント
-│   └── poc/
-│       ├── overview.md
-│       ├── plan/            # 実装プラン
-│       ├── architectures/   # 設計ドキュメント
-│       └── coding-standard/ # コーディング規約
-├── backend/                 # FastAPI（クリーンアーキテクチャ）
-│   └── src/
-│       ├── domain/          # ビジネスルール
-│       ├── application/     # ユースケース
-│       ├── infrastructure/  # DB・外部API
-│       ├── presentation/    # APIエンドポイント
-│       └── jobs/            # バックグラウンドジョブ
-│           ├── lib/         # 共通基盤
-│           ├── executions/  # 個別ジョブ
-│           └── flows/       # オーケストレーション
-└── frontend/                # Next.js
-    └── src/
-        ├── app/             # App Router
-        │   ├── _components/ # 共通コンポーネント
-        │   ├── dashboard/   # ダッシュボード
-        │   ├── screener/    # スクリーナー
-        │   ├── stock/       # 銘柄詳細
-        │   ├── portfolio/   # ポートフォリオ
-        │   └── admin/       # 管理画面
-        ├── components/      # 共通UIコンポーネント
-        ├── hooks/           # 共通フック
-        └── lib/             # ユーティリティ
-```
+ブラウザでDBを確認・操作できます。
 
-## 開発フェーズ
+1. http://localhost:5050 にアクセス
+2. ログイン
+   - Email: `admin@local.dev`
+   - Password: `admin`
+3. サーバー追加（Add New Server）
+   - **General** > Name: `trading`（任意）
+   - **Connection**:
+     - Host: `postgres`
+     - Port: `5432`
+     - Database: `trading`
+     - Username: `trader`
+     - Password: `localdev`
 
-| Phase | 内容 | 状態 |
-|-------|------|------|
-| 1 | 基盤構築（Docker, FastAPI, Next.js） | 完了 |
-| 2 | Market Module | 完了 |
-| 3 | Screener Module | 進行中 |
-| 4 | Portfolio Module | - |
-
-詳細: [docs/poc/plan/plan-overview.md](docs/poc/plan/plan-overview.md)
-
-## ドキュメント
-
-- [PoC概要](docs/poc/overview.md)
-- [実装プラン](docs/poc/plan/plan-overview.md)
-- [アーキテクチャ設計](docs/poc/architectures/service-components.md)
-- [レイヤー設計](docs/poc/architectures/layers/overview.md)
-- [API設計](docs/poc/architectures/api-design.md)
-- [DB設計](docs/poc/architectures/database-design.md)
-- [フロントエンド設計](docs/poc/architectures/frontend-architecture.md)
+---
 
 ## コマンド一覧
 
@@ -218,10 +244,33 @@ docker compose down -v    # 停止 + ボリューム削除（DB初期化）
 docker compose logs -f    # ログ確認
 
 # Backend
+cd backend
+source .venv/bin/activate
 uvicorn src.main:app --reload --port 8000
 
 # Frontend
+cd frontend
 npm run dev               # 開発サーバー
 npm run build             # ビルド
 npm run lint              # Lint
 ```
+
+---
+
+## 開発フェーズ
+
+| Phase | 内容 | 状態 |
+|-------|------|------|
+| 1 | 基盤構築（Docker, FastAPI, Next.js） | 完了 |
+| 2 | Market Module | 完了 |
+| 3 | Screener Module | 完了 |
+| 4 | Portfolio Module | 完了 |
+
+## ドキュメント
+
+- [PoC概要](docs/poc/overview.md)
+- [アーキテクチャ設計](docs/poc/architectures/service-components.md)
+- [ディレクトリ構成](docs/poc/architectures/directory-structure.md)
+- [API設計](docs/poc/architectures/api-design.md)
+- [DB設計](docs/poc/architectures/database-design.md)
+- [フロントエンド設計](docs/poc/architectures/frontend-architecture.md)
