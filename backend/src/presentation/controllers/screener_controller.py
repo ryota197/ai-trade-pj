@@ -61,16 +61,22 @@ def _count_passing(stock: CANSLIMStock) -> int:
     return passing
 
 
-def _create_criteria_schema(name: str, score: int | None) -> CANSLIMCriteriaSchema:
+def _create_criteria_schema(
+    name: str,
+    score: int | None,
+    value: float | None = None,
+    threshold: float = 0.0,
+    description: str = "",
+) -> CANSLIMCriteriaSchema:
     """スコアからCriteriaSchemaを作成"""
     score_val = score or 0
     return CANSLIMCriteriaSchema(
         name=name,
         score=score_val,
         grade=_score_to_grade(score_val),
-        value=None,
-        threshold=0.0,
-        description="",
+        value=value,
+        threshold=threshold,
+        description=description,
     )
 
 
@@ -111,6 +117,10 @@ def _stock_to_summary(stock: CANSLIMStock) -> StockSummarySchema:
 
 def _stock_to_detail(stock: CANSLIMStock) -> StockDetailSchema:
     """CANSLIMStockを詳細スキーマに変換"""
+    # 計算値の取得
+    vol_ratio = _volume_ratio(stock)
+    dist_high = _distance_from_52week_high(stock)
+
     canslim_schema = None
     if stock.canslim_score is not None:
         canslim_schema = CANSLIMScoreSchema(
@@ -118,14 +128,46 @@ def _stock_to_detail(stock: CANSLIMStock) -> StockDetailSchema:
             overall_grade=_score_to_grade(stock.canslim_score),
             passing_count=_count_passing(stock),
             c_score=_create_criteria_schema(
-                "C - Current Quarterly Earnings", stock.score_c
+                name="C - Current Quarterly Earnings",
+                score=stock.score_c,
+                value=float(stock.eps_growth_quarterly) if stock.eps_growth_quarterly else None,
+                threshold=_D.MIN_EPS_GROWTH_QUARTERLY,
+                description="四半期EPS成長率",
             ),
-            a_score=_create_criteria_schema("A - Annual Earnings", stock.score_a),
-            n_score=_create_criteria_schema("N - New High", stock.score_n),
-            s_score=_create_criteria_schema("S - Supply and Demand", stock.score_s),
-            l_score=_create_criteria_schema("L - Leader", stock.score_l),
+            a_score=_create_criteria_schema(
+                name="A - Annual Earnings",
+                score=stock.score_a,
+                value=float(stock.eps_growth_annual) if stock.eps_growth_annual else None,
+                threshold=_D.MIN_EPS_GROWTH_ANNUAL,
+                description="年間EPS成長率",
+            ),
+            n_score=_create_criteria_schema(
+                name="N - New High",
+                score=stock.score_n,
+                value=dist_high,
+                threshold=_D.MAX_DISTANCE_FROM_52W_HIGH,
+                description="52週高値からの乖離率",
+            ),
+            s_score=_create_criteria_schema(
+                name="S - Supply and Demand",
+                score=stock.score_s,
+                value=vol_ratio,
+                threshold=_D.MIN_VOLUME_RATIO,
+                description="出来高倍率",
+            ),
+            l_score=_create_criteria_schema(
+                name="L - Leader",
+                score=stock.score_l,
+                value=float(stock.rs_rating) if stock.rs_rating else None,
+                threshold=float(_D.MIN_RS_RATING),
+                description="RS Rating",
+            ),
             i_score=_create_criteria_schema(
-                "I - Institutional Sponsorship", stock.score_i
+                name="I - Institutional Sponsorship",
+                score=stock.score_i,
+                value=float(stock.institutional_ownership) if stock.institutional_ownership else None,
+                threshold=_D.INSTITUTIONAL_GOOD,
+                description="機関投資家保有率",
             ),
         )
 
