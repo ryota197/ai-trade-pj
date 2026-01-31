@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import get_settings
-from src.presentation.api import (
+from src.presentation.controllers import (
     admin_controller,
     health_controller,
     market_controller,
