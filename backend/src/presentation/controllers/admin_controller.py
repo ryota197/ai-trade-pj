@@ -7,8 +7,12 @@ from sqlalchemy.orm import Session
 
 from src.adapters.database import get_db
 from src.jobs.flows.refresh_screener import RefreshScreenerFlow
+from src.jobs.flows.refresh_market import RefreshMarketFlow
 from src.queries import FlowExecutionQuery, JobExecutionQuery
-from src.presentation.dependencies import get_refresh_screener_flow
+from src.presentation.dependencies import (
+    get_refresh_screener_flow,
+    get_refresh_market_flow,
+)
 from src.presentation.schemas.admin import (
     CancelJobResponse,
     FlowStatusResponse,
@@ -181,3 +185,100 @@ async def cancel_flow(_flow_id: str) -> ApiResponse[CancelJobResponse]:
         status_code=501,
         detail="Flow cancellation is not implemented yet",
     )
+
+
+# ============================================================
+# Market Refresh Endpoints
+# ============================================================
+
+
+async def _run_market_flow(flow: RefreshMarketFlow) -> None:
+    """バックグラウンドでマーケットフローを実行"""
+    try:
+        result = await flow.run()
+        logger.info(
+            f"Market refresh flow completed: flow_id={result.flow_id}, "
+            f"duration={result.duration_seconds:.1f}s"
+        )
+    except Exception as e:
+        logger.error(f"Market refresh flow failed: {e}", exc_info=True)
+
+
+@router.post(
+    "/market/refresh",
+    response_model=ApiResponse[RefreshJobResponse],
+    summary="マーケットデータ更新開始",
+    description="マーケット指標を更新するジョブを開始する",
+)
+async def start_market_refresh(
+    background_tasks: BackgroundTasks,
+    flow: RefreshMarketFlow = Depends(get_refresh_market_flow),
+) -> ApiResponse[RefreshJobResponse]:
+    """マーケットデータ更新を開始"""
+    try:
+        background_tasks.add_task(_run_market_flow, flow)
+
+        response = RefreshJobResponse(
+            flow_id="pending",
+            status="started",
+            message="Market refresh flow started in background.",
+        )
+
+        return ApiResponse(success=True, data=response)
+
+    except Exception as e:
+        logger.error(f"Failed to start market refresh: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start market refresh job: {e}",
+        )
+
+
+@router.get(
+    "/market/refresh/latest",
+    response_model=ApiResponse[list[FlowStatusResponse]],
+    summary="マーケット更新フロー一覧取得",
+)
+async def get_latest_market_flows(
+    limit: int = 10,
+    flow_query: FlowExecutionQuery = Depends(get_flow_query),
+    job_query: JobExecutionQuery = Depends(get_job_query),
+) -> ApiResponse[list[FlowStatusResponse]]:
+    """最新のマーケット更新フロー一覧を取得"""
+    try:
+        flows = flow_query.get_by_name("refresh_market", limit=limit)
+
+        responses = []
+        for flow in flows:
+            jobs = job_query.get_by_flow_id(flow.flow_id)
+            responses.append(
+                FlowStatusResponse(
+                    flow_id=flow.flow_id,
+                    flow_name=flow.flow_name,
+                    status=flow.status,
+                    total_jobs=flow.total_jobs,
+                    completed_jobs=flow.completed_jobs,
+                    current_job=flow.current_job,
+                    started_at=flow.started_at,
+                    completed_at=flow.completed_at,
+                    jobs=[
+                        JobExecutionSchema(
+                            job_name=job.job_name,
+                            status=job.status,
+                            started_at=job.started_at,
+                            completed_at=job.completed_at,
+                            error_message=job.error_message,
+                        )
+                        for job in jobs
+                    ],
+                )
+            )
+
+        return ApiResponse(success=True, data=responses)
+
+    except Exception as e:
+        logger.error(f"Failed to get latest market flows: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get latest market flows: {e}",
+        )
