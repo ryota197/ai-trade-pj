@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from src.adapters.database import get_db
 from src.models import MarketSnapshot
 from src.queries import MarketSnapshotQuery
-from src.services._lib.types import MarketCondition, Signal
+from src.services._lib.types import Signal
 from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.market import (
     MarketIndicatorsResponse,
@@ -81,8 +81,6 @@ def _get_recommendation(score: int) -> str:
 
 def _snapshot_to_status(snapshot: MarketSnapshot) -> MarketStatusResponse:
     """MarketSnapshotを状態レスポンスに変換"""
-    condition = MarketCondition(snapshot.condition)
-
     return MarketStatusResponse(
         condition=snapshot.condition,
         condition_label=snapshot.condition.replace("_", " ").title(),
