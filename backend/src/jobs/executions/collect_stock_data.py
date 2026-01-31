@@ -67,9 +67,10 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
         target_date = date.today()
 
         # S&P500の履歴を取得（RS計算用ベンチマーク）
+        # Note: 252営業日必要なため、余裕を持って2年分取得
         benchmark_bars: list[PriceBar] = []
         try:
-            sp500_history = await self._gateway.get_sp500_history(period="1y")
+            sp500_history = await self._gateway.get_sp500_history(period="2y")
             benchmark_bars = [PriceBar(close=bar.close) for bar in sp500_history]
         except Exception as e:
             # ベンチマーク取得失敗は警告のみ（RS計算がスキップされる）
@@ -106,9 +107,10 @@ class CollectStockDataJob(Job[CollectInput, CollectOutput]):
         financials = await self._gateway.get_financial_metrics(symbol)
 
         # 株価履歴取得（RS計算用）
+        # Note: 252営業日必要なため、余裕を持って2年分取得
         stock_bars: list[PriceBar] = []
         try:
-            history = await self._gateway.get_price_history(symbol, period="1y")
+            history = await self._gateway.get_price_history(symbol, period="2y")
             stock_bars = [PriceBar(close=bar.close) for bar in history]
         except Exception:
             pass

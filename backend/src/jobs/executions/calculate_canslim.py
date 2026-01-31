@@ -24,7 +24,7 @@ class CalculateCANSLIMOutput:
 
     total_stocks: int
     updated_count: int
-    market_condition: MarketCondition
+    market_condition: str  # JSONシリアライズのため文字列で保持
     errors: list[dict] = field(default_factory=list)
 
 
@@ -109,7 +109,7 @@ class CalculateCANSLIMJob(Job[CalculateCANSLIMInput, CalculateCANSLIMOutput]):
         return CalculateCANSLIMOutput(
             total_stocks=len(stocks_with_rs),
             updated_count=len(scores),
-            market_condition=market_condition,
+            market_condition=market_condition.value,  # enum → string
             errors=errors,
         )
 

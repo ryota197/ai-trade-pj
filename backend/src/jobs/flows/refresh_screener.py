@@ -1,7 +1,8 @@
 """スクリーナーデータ更新フロー"""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import uuid4
 
@@ -183,14 +184,31 @@ class RefreshScreenerFlow:
             self._flow_query.update(flow)
 
         except Exception as e:
-            # ジョブ失敗
+            # ジョブ失敗（result をクリアしてからDB更新）
+            job.result = None
             job.fail(error_message=str(e))
             self._job_query.update(job)
             raise
 
     def _to_result_dict(self, result: Any) -> dict:
-        """結果をdict に変換"""
+        """結果をdict に変換（enum も文字列化）"""
         try:
-            return asdict(result)
+            return self._serialize_dataclass(result)
         except TypeError:
             return {"raw": str(result)}
+
+    def _serialize_dataclass(self, obj: Any) -> Any:
+        """dataclass を JSON シリアライズ可能な dict に変換"""
+        if is_dataclass(obj) and not isinstance(obj, type):
+            return {
+                field.name: self._serialize_dataclass(getattr(obj, field.name))
+                for field in fields(obj)
+            }
+        elif isinstance(obj, Enum):
+            return obj.value
+        elif isinstance(obj, list):
+            return [self._serialize_dataclass(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {k: self._serialize_dataclass(v) for k, v in obj.items()}
+        else:
+            return obj

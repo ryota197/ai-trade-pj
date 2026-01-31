@@ -188,7 +188,7 @@ PoCではマイグレーションツールを使用せず、init.sqlを直接編
 
 ```bash
 # 1. init.sql を編集
-vim docker/postgres/init.sql
+vim docker/postgres/init.sql  # 新しい配置場所
 
 # 2. 既存のコンテナ・ボリュームを削除（データも削除される）
 docker compose down -v
