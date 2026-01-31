@@ -16,6 +16,11 @@ from src.jobs.executions.calculate_canslim import (
     CalculateCANSLIMJob,
     CalculateCANSLIMOutput,
 )
+from src.jobs.executions.collect_market_data import (
+    CollectMarketInput,
+    CollectMarketOutput,
+    CollectMarketDataJob,
+)
 
 __all__ = [
     # Base
@@ -32,4 +37,8 @@ __all__ = [
     "CalculateCANSLIMInput",
     "CalculateCANSLIMOutput",
     "CalculateCANSLIMJob",
+    # マーケットデータ収集
+    "CollectMarketInput",
+    "CollectMarketOutput",
+    "CollectMarketDataJob",
 ]

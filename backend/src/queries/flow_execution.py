@@ -49,3 +49,13 @@ class FlowExecutionQuery:
             .limit(limit)
         )
         return list(self._session.scalars(stmt).all())
+
+    def get_by_name(self, flow_name: str, limit: int = 10) -> list[FlowExecution]:
+        """フロー名で最新のフローを取得"""
+        stmt = (
+            select(FlowExecution)
+            .where(FlowExecution.flow_name == flow_name)
+            .order_by(FlowExecution.created_at.desc())
+            .limit(limit)
+        )
+        return list(self._session.scalars(stmt).all())
