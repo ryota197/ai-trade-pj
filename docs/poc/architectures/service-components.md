@@ -1,9 +1,9 @@
-# サービスコンポーネント設計（シンプル3層アーキテクチャ）
+# サービスコンポーネント設計（シンプル5層アーキテクチャ）
 
 ## 概要
 
 本プロジェクトは「A Philosophy of Software Design」の原則に基づき、
-**浅いモジュール（pass-through層）を排除したシンプルな3層アーキテクチャ**を採用する。
+**浅いモジュール（pass-through層）を排除したシンプルな5層アーキテクチャ**を採用する。
 
 ---
 
@@ -15,93 +15,162 @@
 │         (FastAPI, PostgreSQL, yfinance, Web Browser)            │
 ├─────────────────────────────────────────────────────────────────┤
 │                  Presentation + Jobs                             │
-│              (Controllers, Schemas, Batch Flows)                │
+│           (Controllers, Schemas, Batch Flows)                   │
 ├─────────────────────────────────────────────────────────────────┤
-│                    Infrastructure                                │
-│              (Repositories, Gateways)                           │
-├─────────────────────────────────────────────────────────────────┤
-│                        Domain                                    │
-│               (Models, Services, Repository Interfaces)         │
+│                      Queries                                     │
+│                  (Data Access Layer)                            │
+├────────────────────────┬────────────────────────────────────────┤
+│       Services         │            Adapters                    │
+│   (Business Logic)     │     (External Integrations)           │
+├────────────────────────┴────────────────────────────────────────┤
+│                        Models                                    │
+│                 (ORM + Entity Methods)                          │
 └─────────────────────────────────────────────────────────────────┘
 
-依存の方向: 外側 → 内側（内側は外側を知らない）
+依存の方向: 上位 → 下位（下位は上位を知らない）
 ```
 
 ---
 
 ## レイヤー構成
 
-### 1. Domain層（最内層）
+### 1. Models層（最下層）
 
-**責務**: ビジネスルール、ドメインロジックの定義
+**責務**: データ構造の定義、エンティティメソッド
 
-- フレームワークに依存しない純粋なPythonコード
+- SQLAlchemy ORM モデル
+- 状態変更メソッド（start, complete, fail等）
 - 他のどのレイヤーにも依存しない
 
 | 要素 | 説明 |
 |------|------|
-| Model | ビジネスエンティティ（CANSLIMStock, Trade等） |
-| Domain Service | 複数エンティティにまたがるロジック（RSCalculator等） |
-| Repository Interface | データアクセスの抽象インターフェース |
+| ORM Model | テーブル定義（CANSLIMStock, Trade等） |
+| Entity Methods | 状態管理ロジック（FlowExecution.start()等） |
+| Enums | データ関連の列挙型（TradeType, WatchlistStatus等） |
 
 ---
 
-### 2. Infrastructure層（インフラ層）
+### 2. Services層（ビジネスロジック）
 
-**責務**: 外部サービス、データベース、APIとの実際の連携
+**責務**: ビジネスルール、計算ロジック
 
-- Domain層のインターフェースを実装
+- フレームワークに依存しない純粋なPythonコード
+- Models層のみに依存
+
+| 要素 | 説明 |
+|------|------|
+| Service | 計算ロジック（RSCalculator, CANSLIMScorer等） |
+| Constants | ビジネス定数（CANSLIMDefaults, TradingDays） |
+| Types (_lib/) | 型定義、値オブジェクト（MarketCondition, ScreeningCriteria） |
+
+---
+
+### 3. Queries層（データアクセス）
+
+**責務**: データベースへのCRUD操作
+
+- SQLAlchemyを使用したクエリ実装
+- Models層、Adapters層に依存
+
+| 要素 | 説明 |
+|------|------|
+| Query Class | データアクセスロジック（CANSLIMStockQuery等） |
+
+---
+
+### 4. Adapters層（外部連携）
+
+**責務**: 外部サービス、データベース接続
+
 - 外部ライブラリ（yfinance, SQLAlchemy等）に依存
+- 他のレイヤーに依存しない
 
 | 要素 | 説明 |
 |------|------|
-| Repository Impl | リポジトリインターフェースの実装 |
-| Gateway | 外部APIとの連携（インターフェース＋実装） |
-| Database | DB接続設定 |
+| Database | DB接続設定（engine, Base, get_db） |
+| Gateway | 外部API連携（YFinanceGateway） |
+| Provider | データプロバイダ（SymbolProvider） |
 
 ---
 
-### 3. Presentation層（プレゼンテーション層）
+### 5. Presentation層（API）
 
-**責務**: HTTPリクエスト/レスポンスの処理、API定義
+**責務**: HTTPリクエスト/レスポンスの処理
 
-- Repository/Gatewayを直接呼び出す
-- Domain Model → Schema変換を担当
-- FastAPIのルーター、Pydanticスキーマを定義
+- Queries/Servicesを直接呼び出す
+- ORM Model → Schema変換を担当
 
 | 要素 | 説明 |
 |------|------|
-| Controller | APIルーター、Repository/Gateway呼び出し |
+| Controller | APIエンドポイント定義 |
 | Schema | Pydanticスキーマ（リクエスト/レスポンス） |
 | Dependencies | 依存性注入設定 |
 
 ---
 
-### 4. Jobs層（バッチ処理層）
+### 6. Jobs層（バッチ処理）
 
 **責務**: 長時間バッチ処理のオーケストレーション
 
-- Repository/Gatewayを直接利用
+- Queries/Adaptersを直接利用
 - 管理画面からトリガーで実行
 
 | 要素 | 説明 |
 |------|------|
-| Flow | 複数Jobのオーケストレーション |
-| Job | 個別の処理単位 |
+| Flow | 複数Jobのオーケストレーション（RefreshScreenerFlow） |
+| Job | 個別の処理単位（CollectStockDataJob等） |
 
 ---
 
-## Frontend（参考）
-
-フロントエンドはシンプルな構成を維持しつつ、責務分離を意識する。
+## ディレクトリ構成
 
 ```
-src/
-├── app/           # ページ（Presentation）
-├── components/    # UIコンポーネント（Presentation）
-├── hooks/         # カスタムフック（Application相当）
-├── lib/           # API通信、ユーティリティ（Infrastructure相当）
-└── types/         # 型定義（Domain相当）
+backend/src/
+├── models/               # ORM models + entity methods
+│   ├── canslim_stock.py
+│   ├── trade.py
+│   ├── watchlist.py
+│   ├── market_snapshot.py
+│   ├── flow_execution.py
+│   └── job_execution.py
+│
+├── services/             # Business logic
+│   ├── _lib/             # Types, value objects
+│   │   ├── types.py
+│   │   └── screening_criteria.py
+│   ├── constants/        # Business constants
+│   │   ├── canslim_defaults.py
+│   │   └── trading_days.py
+│   ├── rs_calculator.py
+│   ├── rs_rating_calculator.py
+│   ├── canslim_scorer.py
+│   └── market_analyzer.py
+│
+├── queries/              # Data access
+│   ├── canslim_stock.py
+│   ├── trade.py
+│   ├── watchlist.py
+│   ├── market_snapshot.py
+│   ├── flow_execution.py
+│   └── job_execution.py
+│
+├── adapters/             # External integrations
+│   ├── database.py
+│   ├── yfinance.py
+│   └── symbol_provider.py
+│
+├── presentation/         # API layer
+│   ├── controllers/
+│   ├── schemas/
+│   └── dependencies.py
+│
+├── jobs/                 # Batch processing
+│   ├── executions/
+│   ├── flows/
+│   └── lib/
+│
+├── main.py
+└── config.py
 ```
 
 ---
@@ -109,39 +178,50 @@ src/
 ## 依存関係の方向
 
 ```
-Presentation ──┬──> Infrastructure ──> Domain
-               │
-Jobs ──────────┘
+presentation ──> queries ──> models
+      │              ↓
+      │          adapters
+      ↓
+   services ──────> models
+      │
+   jobs ───────────────┘
 ```
 
-- **Domain**: 何にも依存しない（最内層）
-- **Infrastructure**: Domainのインターフェースを実装
-- **Presentation**: Domain, Infrastructureに依存
-- **Jobs**: Domain, Infrastructureに依存
+**許可される依存:**
+- presentation → queries, services, models, schemas
+- queries → models, adapters
+- services → models（ORM を引数として受け取る）
+- jobs → queries, services, models, adapters
+- adapters → (外部ライブラリのみ)
+
+**禁止される依存:**
+- models → 他のどの層にも依存しない
+- services → queries, adapters に依存しない
+- adapters → models, queries, services に依存しない
 
 ---
 
 ## 設計原則
 
-### なぜApplication層を削除したか
+### YAGNI適用箇所
 
-従来のクリーンアーキテクチャでは4層構造だったが、以下の理由で3層に簡素化：
+1. **抽象インターフェース削除**: Repository/Gateway抽象クラス不要
+2. **Application層削除**: UseCase層はpass-throughのため不要
+3. **薄いロジックのインライン化**: 1-3行の計算はヘルパー関数として呼び出し側に配置
 
-1. **浅いモジュール問題**: UseCaseがRepository呼び出し→DTO変換のみの「pass-through」になっていた
-2. **不要な抽象化**: 本PoCでは複数実装の差し替えが不要
-3. **YAGNI原則**: 必要になるまで抽象化層を追加しない
+### ORM モデルの拡張
 
-> 参考: "A Philosophy of Software Design" by John Ousterhout
+FlowExecution, JobExecution等の状態管理が必要なモデルには、
+エンティティメソッドを直接定義する。
 
----
+```python
+class FlowExecution(Base):
+    # ... ORM定義 ...
 
-## テスト戦略
-
-| レイヤー | テスト種別 | 特徴 |
-|---------|-----------|------|
-| Domain | 単体テスト | モック不要、純粋なロジックテスト |
-| Infrastructure | 統合テスト | 実際のDB/APIとの接続テスト |
-| Presentation | E2Eテスト | 全レイヤー統合テスト |
+    def start(self, first_job: str) -> None:
+        self.status = "running"
+        self.started_at = datetime.now(timezone.utc)
+```
 
 ---
 
@@ -149,5 +229,5 @@ Jobs ──────────┘
 
 | ドキュメント | 内容 |
 |-------------|------|
-| [service-architecture.md](../service-architecture.md) | サービスアーキテクチャ全体設計 |
+| [directory-structure.md](./directory-structure.md) | ディレクトリ構成 |
 | [backend-guidelines.md](../coding-standard/backend-guidelines.md) | バックエンドコーディング規約 |

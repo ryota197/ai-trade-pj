@@ -1,4 +1,4 @@
-# ディレクトリ構成（クリーンアーキテクチャ）
+# ディレクトリ構成（シンプル5層アーキテクチャ）
 
 ## 全体構成
 
@@ -19,7 +19,7 @@ ai-trade-app/
 ├── frontend/                    # Next.js アプリ
 │   └── ...
 │
-├── backend/                     # FastAPI アプリ（クリーンアーキテクチャ）
+├── backend/                     # FastAPI アプリ（5層アーキテクチャ）
 │   └── ...
 │
 └── ml/                          # ML関連（Phase 2以降）
@@ -28,7 +28,7 @@ ai-trade-app/
 
 ---
 
-## Backend（クリーンアーキテクチャ）
+## Backend（シンプル5層アーキテクチャ）
 
 ```
 backend/
@@ -41,138 +41,90 @@ backend/
 │   ├── main.py                  # FastAPI エントリーポイント
 │   ├── config.py                # 設定管理
 │   │
-│   ├── domain/                  # ドメイン層（最内層）
+│   ├── models/                  # ORM モデル層（最下層）
+│   │   ├── __init__.py
+│   │   ├── canslim_stock.py     # CAN-SLIM銘柄
+│   │   ├── trade.py             # トレード + TradeType, TradeStatus
+│   │   ├── watchlist.py         # ウォッチリスト + WatchlistStatus
+│   │   ├── market_snapshot.py   # マーケットスナップショット
+│   │   ├── flow_execution.py    # フロー実行（エンティティメソッド含む）
+│   │   └── job_execution.py     # ジョブ実行（エンティティメソッド含む）
+│   │
+│   ├── services/                # ビジネスロジック層
 │   │   ├── __init__.py
 │   │   │
-│   │   ├── entities/            # エンティティ
+│   │   ├── _lib/                # 内部ライブラリ（型定義・値オブジェクト）
 │   │   │   ├── __init__.py
-│   │   │   ├── stock.py
-│   │   │   ├── market_status.py
-│   │   │   ├── watchlist_item.py
-│   │   │   └── paper_trade.py
+│   │   │   ├── types.py         # MarketCondition, Signal, MarketAnalysisResult
+│   │   │   └── screening_criteria.py
 │   │   │
-│   │   ├── value_objects/       # 値オブジェクト
+│   │   ├── constants/           # ビジネス定数
 │   │   │   ├── __init__.py
-│   │   │   ├── canslim_score.py
-│   │   │   ├── price_data.py
-│   │   │   └── market_indicators.py
+│   │   │   ├── canslim_defaults.py
+│   │   │   └── trading_days.py
 │   │   │
-│   │   ├── services/            # ドメインサービス
-│   │   │   ├── __init__.py
-│   │   │   ├── market_analyzer.py
-│   │   │   ├── rs_rating_calculator.py
-│   │   │   └── performance_calculator.py
-│   │   │
-│   │   └── repositories/        # リポジトリインターフェース（抽象）
-│   │       ├── __init__.py
-│   │       ├── stock_repository.py
-│   │       ├── market_data_repository.py
-│   │       ├── watchlist_repository.py
-│   │       └── trade_repository.py
+│   │   ├── rs_calculator.py     # RS計算
+│   │   ├── rs_rating_calculator.py  # RSレーティング計算
+│   │   ├── canslim_scorer.py    # CAN-SLIMスコア計算
+│   │   └── market_analyzer.py   # マーケット分析
 │   │
-│   ├── application/             # アプリケーション層（ユースケース）
+│   ├── queries/                 # データアクセス層
+│   │   ├── __init__.py
+│   │   ├── canslim_stock.py     # CANSLIMStockQuery
+│   │   ├── trade.py             # TradeQuery
+│   │   ├── watchlist.py         # WatchlistQuery
+│   │   ├── market_snapshot.py   # MarketSnapshotQuery
+│   │   ├── flow_execution.py    # FlowExecutionQuery
+│   │   └── job_execution.py     # JobExecutionQuery
+│   │
+│   ├── adapters/                # 外部連携層
+│   │   ├── __init__.py
+│   │   ├── database.py          # DB接続（engine, Base, get_db）
+│   │   ├── yfinance.py          # yfinance連携（Gateway + データクラス）
+│   │   └── symbol_provider.py   # シンボルプロバイダ
+│   │
+│   ├── presentation/            # プレゼンテーション層
 │   │   ├── __init__.py
 │   │   │
-│   │   ├── use_cases/           # ユースケース
+│   │   ├── controllers/         # APIエンドポイント
 │   │   │   ├── __init__.py
-│   │   │   │
-│   │   │   ├── market/          # マーケット関連
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── get_market_status.py
-│   │   │   │   └── get_market_indicators.py
-│   │   │   │
-│   │   │   ├── screener/        # スクリーナー関連
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── screen_canslim_stocks.py
-│   │   │   │   └── get_stock_detail.py
-│   │   │   │
-│   │   │   ├── portfolio/       # ポートフォリオ関連
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── manage_watchlist.py
-│   │   │   │   ├── record_trade.py
-│   │   │   │   └── get_performance.py
-│   │   │   │
-│   │   │   └── data/            # データ取得関連
-│   │   │       ├── __init__.py
-│   │   │       ├── get_stock_quote.py
-│   │   │       └── get_price_history.py
+│   │   │   ├── health_controller.py
+│   │   │   ├── market_controller.py
+│   │   │   ├── screener_controller.py
+│   │   │   ├── portfolio_controller.py
+│   │   │   └── admin_controller.py
 │   │   │
-│   │   ├── dto/                 # Data Transfer Objects
+│   │   ├── schemas/             # Pydantic スキーマ
 │   │   │   ├── __init__.py
-│   │   │   ├── market_dto.py
-│   │   │   ├── screener_dto.py
-│   │   │   └── portfolio_dto.py
+│   │   │   ├── common.py
+│   │   │   ├── health.py
+│   │   │   ├── market.py
+│   │   │   ├── screener.py
+│   │   │   ├── portfolio.py
+│   │   │   └── admin.py
 │   │   │
-│   │   └── interfaces/          # 外部サービスのインターフェース
-│   │       ├── __init__.py
-│   │       ├── financial_data_gateway.py
-│   │       └── price_data_gateway.py
+│   │   └── dependencies.py      # 依存性注入設定
 │   │
-│   ├── infrastructure/          # インフラストラクチャ層
-│   │   ├── __init__.py
-│   │   │
-│   │   ├── database/            # データベース関連
-│   │   │   ├── __init__.py
-│   │   │   ├── connection.py    # DB接続設定
-│   │   │   ├── models/          # SQLAlchemyモデル
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── market_snapshot_model.py
-│   │   │   │   ├── screener_result_model.py
-│   │   │   │   ├── watchlist_model.py
-│   │   │   │   ├── paper_trade_model.py
-│   │   │   │   └── price_cache_model.py
-│   │   │   └── migrations/      # マイグレーション（将来）
-│   │   │
-│   │   ├── repositories/        # リポジトリ実装
-│   │   │   ├── __init__.py
-│   │   │   ├── postgres_stock_repository.py
-│   │   │   ├── postgres_watchlist_repository.py
-│   │   │   └── postgres_trade_repository.py
-│   │   │
-│   │   └── gateways/            # 外部API連携（ゲートウェイ実装）
-│   │       ├── __init__.py
-│   │       ├── yfinance_gateway.py           # 株価・財務データ（統合版）
-│   │       └── yfinance_market_data_gateway.py  # マーケット指標（VIX, RSI等）
-│   │
-│   └── presentation/            # プレゼンテーション層
+│   └── jobs/                    # バッチ処理層
 │       ├── __init__.py
 │       │
-│       ├── api/                 # FastAPI ルーター
+│       ├── executions/          # ジョブ実装
 │       │   ├── __init__.py
-│       │   ├── market_controller.py
-│       │   ├── screener_controller.py
-│       │   ├── data_controller.py
-│       │   └── portfolio_controller.py
+│       │   ├── base.py
+│       │   ├── collect_stock_data.py
+│       │   ├── calculate_rs_rating.py
+│       │   └── calculate_canslim.py
 │       │
-│       ├── schemas/             # Pydantic スキーマ（APIリクエスト/レスポンス）
+│       ├── flows/               # フロー定義
 │       │   ├── __init__.py
-│       │   ├── common.py        # 共通スキーマ（ApiResponse等）
-│       │   ├── market.py
-│       │   ├── screener.py
-│       │   ├── data.py
-│       │   └── portfolio.py
+│       │   └── refresh_screener.py
 │       │
-│       └── dependencies.py      # 依存性注入設定
+│       └── lib/                 # ジョブ共通基盤
+│           ├── __init__.py
+│           └── models.py        # FlowStatus, JobStatus enums
 │
 └── tests/                       # テスト
-    ├── __init__.py
-    ├── conftest.py              # pytest設定
-    │
-    ├── domain/                  # ドメイン層テスト
-    │   ├── test_market_analyzer.py
-    │   ├── test_canslim_score.py
-    │   └── test_rs_rating_calculator.py
-    │
-    ├── application/             # ユースケーステスト
-    │   ├── test_get_market_status.py
-    │   └── test_screen_canslim_stocks.py
-    │
-    ├── infrastructure/          # インフラ層テスト（統合テスト）
-    │   ├── test_yfinance_gateway.py
-    │   └── test_postgres_repository.py
-    │
-    └── presentation/            # API テスト（E2E）
-        └── test_api_endpoints.py
+    └── ...
 ```
 
 ---
@@ -180,22 +132,19 @@ backend/
 ## レイヤー間の依存関係
 
 ```
-tests/
-   │
-   ├── domain/          → テスト対象: domain/
-   ├── application/     → テスト対象: application/ + domain/（モック）
-   ├── infrastructure/  → テスト対象: infrastructure/ + 実DB/API
-   └── presentation/    → テスト対象: 全レイヤー統合
-
 src/
    │
-   ├── presentation/    → 依存: application, (infrastructure via DI)
+   ├── presentation/    → 依存: queries, services, models
    │       ↓
-   ├── application/     → 依存: domain
+   ├── queries/         → 依存: models, adapters
    │       ↓
-   ├── domain/          → 依存: なし（最内層）
-   │       ↑
-   └── infrastructure/  → 実装: domain/repositories, application/interfaces
+   ├── services/        → 依存: models のみ
+   │       ↓
+   ├── models/          → 依存: adapters.database (Base)
+   │
+   └── adapters/        → 依存: 外部ライブラリのみ
+
+jobs/ → queries, services, models, adapters に依存
 ```
 
 ---
@@ -220,42 +169,19 @@ frontend/
     │   ├── screener/
     │   │   └── page.tsx
     │   │
-    │   ├── stock/
-    │   │   └── [symbol]/
-    │   │       └── page.tsx
-    │   │
     │   └── portfolio/
     │       └── page.tsx
     │
     ├── components/              # UIコンポーネント
     │   ├── charts/
-    │   │   ├── PriceChart.tsx
-    │   │   └── index.ts
-    │   │
     │   ├── market/
-    │   │   ├── MarketStatus.tsx
-    │   │   ├── IndicatorCard.tsx
-    │   │   └── index.ts
-    │   │
     │   ├── screener/
-    │   │   ├── StockTable.tsx
-    │   │   ├── FilterPanel.tsx
-    │   │   └── index.ts
-    │   │
     │   ├── portfolio/
-    │   │   ├── WatchlistTable.tsx
-    │   │   ├── TradeForm.tsx
-    │   │   └── index.ts
-    │   │
     │   └── ui/
-    │       ├── Button.tsx
-    │       ├── Card.tsx
-    │       └── index.ts
     │
     ├── hooks/                   # カスタムフック
     │   ├── useMarketStatus.ts
     │   ├── useScreener.ts
-    │   ├── useStockData.ts
     │   └── index.ts
     │
     ├── lib/                     # ユーティリティ
@@ -272,29 +198,18 @@ frontend/
 
 ---
 
-## ML (Phase 2以降)
+## モジュールの命名規則
 
-```
-ml/
-├── notebooks/                   # 実験用Jupyter
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_pattern_detection.ipynb
-│   └── 03_model_training.ipynb
-│
-├── models/                      # 学習済みモデル
-│   └── pattern_detector_v1.pt
-│
-├── data/                        # 学習データ
-│   ├── raw/
-│   └── processed/
-│
-└── src/
-    ├── __init__.py
-    ├── dataset.py
-    ├── model.py
-    ├── train.py
-    └── inference.py
-```
+| レイヤー | 命名パターン | 例 |
+|---------|-------------|-----|
+| ORM Model | `{名詞}.py` | `canslim_stock.py`, `trade.py` |
+| Service | `{名詞}_calculator.py`, `{名詞}_scorer.py` | `rs_calculator.py` |
+| Query | `{名詞}.py` (クラス名: `{名詞}Query`) | `canslim_stock.py` → `CANSLIMStockQuery` |
+| Adapter | `{名詞}.py` | `database.py`, `yfinance.py` |
+| Controller | `{名詞}_controller.py` | `market_controller.py` |
+| Schema | `{名詞}.py` | `market.py`, `screener.py` |
+| Job | `{動詞}_{名詞}.py` | `collect_stock_data.py` |
+| Flow | `{動詞}_{名詞}.py` | `refresh_screener.py` |
 
 ---
 
@@ -314,7 +229,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/src/infrastructure/database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:
   postgres_data:
@@ -326,71 +240,7 @@ volumes:
 # Database
 DATABASE_URL=postgresql://trader:localdev@localhost:5432/trading
 
-# External APIs
-FMP_API_KEY=your_api_key_here
-
 # App
 DEBUG=true
 LOG_LEVEL=INFO
 ```
-
-### .gitignore
-
-```gitignore
-# Dependencies
-node_modules/
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Build
-.next/
-dist/
-build/
-
-# Environment
-.env
-.env.local
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Data
-*.csv
-*.parquet
-ml/data/raw/
-ml/models/*.pt
-
-# Logs
-*.log
-logs/
-
-# Test
-.coverage
-htmlcov/
-.pytest_cache/
-```
-
----
-
-## モジュールの命名規則
-
-| レイヤー | 命名パターン | 例 |
-|---------|-------------|-----|
-| Entity | `{名詞}.py` | `stock.py`, `market_status.py` |
-| Value Object | `{名詞}.py` | `canslim_score.py` |
-| Domain Service | `{名詞}_calculator.py`, `{名詞}_analyzer.py` | `market_analyzer.py` |
-| Repository Interface | `{名詞}_repository.py` | `stock_repository.py` |
-| Use Case | `{動詞}_{名詞}.py` | `get_market_status.py`, `screen_canslim_stocks.py` |
-| Gateway Interface | `{名詞}_gateway.py` | `financial_data_gateway.py` |
-| Repository Impl | `postgres_{名詞}_repository.py` | `postgres_stock_repository.py` |
-| Gateway Impl | `{provider}_{名詞}_gateway.py` | `yfinance_gateway.py`, `yfinance_market_data_gateway.py` |
-| Controller | `{名詞}_controller.py` | `market_controller.py` |
-| Schema | `{名詞}.py` | `market.py`, `screener.py` |
