@@ -1,6 +1,6 @@
 """スクリーナーAPI"""
 
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -228,6 +228,27 @@ def screen_canslim_stocks(
     try:
         query = CANSLIMStockQuery(db)
 
+        # 最新の計算済みデータの日付を取得
+        target_date = query.get_latest_date()
+        if target_date is None:
+            # データがない場合は空のレスポンス
+            return ApiResponse(
+                success=True,
+                data=ScreenerResponse(
+                    total_count=0,
+                    stocks=[],
+                    filter_applied=ScreenerFilterSchema(
+                        min_rs_rating=min_rs_rating,
+                        min_eps_growth_quarterly=min_eps_growth_quarterly,
+                        min_eps_growth_annual=min_eps_growth_annual,
+                        max_distance_from_52w_high=max_distance_from_52w_high,
+                        min_volume_ratio=min_volume_ratio,
+                        min_canslim_score=min_canslim_score,
+                    ),
+                    screened_at=datetime.now(),
+                ),
+            )
+
         criteria = ScreeningCriteria(
             min_rs_rating=min_rs_rating,
             min_canslim_score=min_canslim_score,
@@ -238,7 +259,7 @@ def screen_canslim_stocks(
         )
 
         stocks = query.find_by_criteria(
-            target_date=date.today(),
+            target_date=target_date,
             criteria=criteria,
             limit=limit,
             offset=offset,
@@ -281,9 +302,14 @@ def get_stock_detail(
     try:
         query = CANSLIMStockQuery(db)
 
+        # 最新の計算済みデータの日付を取得
+        target_date = query.get_latest_date()
+        if target_date is None:
+            raise HTTPException(status_code=404, detail=f"No screening data available")
+
         stock = query.find_by_symbol_and_date(
             symbol=symbol.upper(),
-            target_date=date.today(),
+            target_date=target_date,
         )
 
         if stock is None:

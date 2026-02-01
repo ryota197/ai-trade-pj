@@ -3,7 +3,7 @@
 from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,17 @@ class CANSLIMStockQuery:
         self._session = session
 
     # === 取得系 ===
+
+    def get_latest_date(self) -> date | None:
+        """計算済みデータが存在する最新日付を取得"""
+        stmt = (
+            select(func.max(CANSLIMStock.date))
+            .where(
+                CANSLIMStock.rs_rating.isnot(None),
+                CANSLIMStock.canslim_score.isnot(None),
+            )
+        )
+        return self._session.scalar(stmt)
 
     def find_by_symbol_and_date(
         self, symbol: str, target_date: date
