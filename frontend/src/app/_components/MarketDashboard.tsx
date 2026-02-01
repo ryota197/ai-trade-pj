@@ -75,6 +75,7 @@ export function MarketDashboard() {
             value={indicators.vix}
             signal={indicators.vix_signal}
             description="Fear Index"
+            indicatorId="vix"
           />
 
           <IndicatorCard
@@ -82,6 +83,7 @@ export function MarketDashboard() {
             value={indicators.sp500_rsi}
             signal={indicators.sp500_rsi_signal}
             description="14-day RSI"
+            indicatorId="rsi"
           />
 
           <IndicatorCard
@@ -90,6 +92,7 @@ export function MarketDashboard() {
             signal={indicators.sp500_above_ma200 ? "bullish" : "bearish"}
             format="currency"
             description={`200MA: ${indicators.sp500_ma200.toLocaleString()}`}
+            indicatorId="ma200"
           />
 
           <IndicatorCard
@@ -97,6 +100,7 @@ export function MarketDashboard() {
             value={indicators.put_call_ratio}
             signal={indicators.put_call_signal}
             description="CBOE Equity P/C"
+            indicatorId="put_call_ratio"
           />
         </div>
       </div>

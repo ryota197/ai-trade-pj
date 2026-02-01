@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { SignalType } from "@/types/market";
+import type { IndicatorId } from "@/lib/indicator-guide";
+import { IndicatorInfoPopover } from "./IndicatorInfoPopover";
 
 interface IndicatorCardProps {
   title: string;
@@ -8,6 +10,8 @@ interface IndicatorCardProps {
   signal: SignalType;
   description?: string;
   format?: "number" | "percent" | "currency";
+  /** 指標ID（指定するとヘルプアイコンを表示） */
+  indicatorId?: IndicatorId;
 }
 
 const signalStyles: Record<
@@ -28,6 +32,7 @@ export function IndicatorCard({
   signal,
   description,
   format = "number",
+  indicatorId,
 }: IndicatorCardProps) {
   const style = signalStyles[signal];
 
@@ -54,9 +59,12 @@ export function IndicatorCard({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {title}
-          </CardTitle>
+          <div className="flex items-center gap-1.5">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {title}
+            </CardTitle>
+            {indicatorId && <IndicatorInfoPopover indicatorId={indicatorId} />}
+          </div>
           <Badge variant={style.variant} className="text-xs">
             {style.label}
           </Badge>
