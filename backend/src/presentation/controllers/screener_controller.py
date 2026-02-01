@@ -305,7 +305,7 @@ def get_stock_detail(
         # 最新の計算済みデータの日付を取得
         target_date = query.get_latest_date()
         if target_date is None:
-            raise HTTPException(status_code=404, detail=f"No screening data available")
+            raise HTTPException(status_code=404, detail="No screening data available")
 
         stock = query.find_by_symbol_and_date(
             symbol=symbol.upper(),
