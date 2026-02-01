@@ -24,7 +24,7 @@ jobs:
           username: ${{ secrets.PI_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
           script: |
-            cd ~/ai-trade-app
+            cd ~/dev/ai-trade-pj
 
             # 最新コードを取得
             git pull origin main
