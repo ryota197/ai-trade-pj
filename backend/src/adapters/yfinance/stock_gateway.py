@@ -1,78 +1,15 @@
-"""yfinance データ取得アダプター"""
+"""株価・財務データ取得ゲートウェイ"""
 
-from dataclasses import dataclass
 from datetime import datetime
 
 import yfinance as yf
 
-
-# ========================================
-# データクラス
-# ========================================
-
-
-@dataclass(frozen=True)
-class QuoteData:
-    """株価データ"""
-
-    symbol: str
-    price: float
-    change: float
-    change_percent: float
-    volume: int
-    avg_volume: int
-    market_cap: float | None
-    pe_ratio: float | None
-    week_52_high: float
-    week_52_low: float
-    timestamp: datetime
-
-
-@dataclass(frozen=True)
-class HistoricalBar:
-    """過去の株価バー"""
-
-    date: datetime
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-
-
-@dataclass(frozen=True)
-class RawFinancialData:
-    """財務生データ"""
-
-    symbol: str
-    quarterly_eps: list[float]  # 四半期EPS（新しい順）
-    annual_eps: list[float]  # 年間EPS（新しい順）
-    eps_ttm: float | None  # 直近12ヶ月EPS
-    revenue_growth: float | None  # 売上成長率（%）
-    profit_margin: float | None  # 利益率（%）
-    roe: float | None  # 自己資本利益率（%）
-    debt_to_equity: float | None  # 負債資本比率
-    institutional_ownership: float | None  # 機関投資家保有率（%）
-
-
-@dataclass(frozen=True)
-class FinancialMetrics:
-    """財務指標（計算済み）"""
-
-    symbol: str
-    eps_ttm: float | None
-    eps_growth_quarterly: float | None
-    eps_growth_annual: float | None
-    revenue_growth: float | None
-    profit_margin: float | None
-    roe: float | None
-    debt_to_equity: float | None
-    institutional_ownership: float | None
-
-
-# ========================================
-# YFinance Gateway
-# ========================================
+from src.adapters.yfinance.types import (
+    FinancialMetrics,
+    HistoricalBar,
+    QuoteData,
+    RawFinancialData,
+)
 
 
 class YFinanceGateway:
@@ -259,84 +196,3 @@ class YFinanceGateway:
         if value is None:
             return None
         return round(value * 100, 2)
-
-
-# ========================================
-# YFinance Market Data Gateway
-# ========================================
-
-
-class YFinanceMarketDataGateway:
-    """
-    マーケットデータ取得ゲートウェイ
-
-    VIX、S&P500価格、RSI、200日移動平均、Put/Call Ratioを取得する。
-    """
-
-    VIX_SYMBOL = "^VIX"
-    SP500_SYMBOL = "^GSPC"
-
-    def get_vix(self) -> float:
-        """VIX（恐怖指数）を取得"""
-        ticker = yf.Ticker(self.VIX_SYMBOL)
-        info = ticker.info
-
-        price = info.get("regularMarketPrice")
-        if price is None:
-            raise ValueError("Failed to fetch VIX data")
-
-        return float(price)
-
-    def get_sp500_price(self) -> float:
-        """S&P500の現在価格を取得"""
-        ticker = yf.Ticker(self.SP500_SYMBOL)
-        info = ticker.info
-
-        price = info.get("regularMarketPrice")
-        if price is None:
-            raise ValueError("Failed to fetch S&P500 price")
-
-        return float(price)
-
-    def get_sp500_rsi(self, period: int = 14) -> float:
-        """S&P500のRSI（相対力指数）を計算"""
-        ticker = yf.Ticker(self.SP500_SYMBOL)
-        hist = ticker.history(period="3mo", interval="1d")
-
-        if hist.empty or len(hist) < period + 1:
-            raise ValueError("Insufficient data to calculate RSI")
-
-        close_prices = hist["Close"]
-        delta = close_prices.diff()
-
-        gain = delta.where(delta > 0, 0)
-        loss = (-delta).where(delta < 0, 0)
-
-        avg_gain = gain.ewm(alpha=1 / period, min_periods=period).mean()
-        avg_loss = loss.ewm(alpha=1 / period, min_periods=period).mean()
-
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-
-        return round(float(rsi.iloc[-1]), 2)
-
-    def get_sp500_ma200(self) -> float:
-        """S&P500の200日移動平均を取得"""
-        ticker = yf.Ticker(self.SP500_SYMBOL)
-        hist = ticker.history(period="1y", interval="1d")
-
-        if hist.empty or len(hist) < 200:
-            raise ValueError("Insufficient data to calculate 200MA")
-
-        ma200 = hist["Close"].rolling(window=200).mean().iloc[-1]
-
-        return round(float(ma200), 2)
-
-    def get_put_call_ratio(self) -> float:
-        """
-        Put/Call Ratioを取得
-
-        Note:
-            yfinanceでは直接取得できないため、POCではデフォルト値を返す。
-        """
-        return 0.85

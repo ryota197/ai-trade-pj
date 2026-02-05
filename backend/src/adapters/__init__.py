@@ -8,6 +8,8 @@ from src.adapters.symbol_provider import (
 )
 from src.adapters.yfinance import (
     FinancialMetrics,
+    FundamentalIndicators,
+    FundamentalsGateway,
     HistoricalBar,
     QuoteData,
     RawFinancialData,
@@ -24,10 +26,12 @@ __all__ = [
     # YFinance
     "YFinanceGateway",
     "YFinanceMarketDataGateway",
+    "FundamentalsGateway",
     "QuoteData",
     "HistoricalBar",
     "RawFinancialData",
     "FinancialMetrics",
+    "FundamentalIndicators",
     # Symbol Provider
     "SymbolProvider",
     "WikipediaSymbolProvider",
