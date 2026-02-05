@@ -124,6 +124,35 @@ class ScreenerResponse(BaseModel):
     }
 
 
+class FundamentalIndicatorsResponse(BaseModel):
+    """ファンダメンタル指標レスポンス"""
+
+    symbol: str = Field(..., description="ティッカーシンボル")
+    # バリュエーション
+    forward_pe: float | None = Field(None, description="Forward PER")
+    peg_ratio: float | None = Field(None, description="PEG Ratio")
+    # 収益性
+    roe: float | None = Field(None, description="ROE（%）")
+    operating_margin: float | None = Field(None, description="営業利益率（%）")
+    revenue_growth: float | None = Field(None, description="売上成長率（%）")
+    # リスク
+    beta: float | None = Field(None, description="ベータ値")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "symbol": "AAPL",
+                "forward_pe": 28.5,
+                "peg_ratio": 1.2,
+                "roe": 147.0,
+                "operating_margin": 30.2,
+                "revenue_growth": 8.1,
+                "beta": 1.25,
+            }
+        }
+    }
+
+
 class StockDetailSchema(BaseModel):
     """銘柄詳細スキーマ"""
 

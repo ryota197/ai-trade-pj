@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.adapters.database import get_db
+from src.adapters.yfinance import FundamentalsGateway
 from src.models import CANSLIMStock
 from src.queries import CANSLIMStockQuery
 from src.services.constants import CANSLIMDefaults
@@ -15,6 +16,7 @@ from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.screener import (
     CANSLIMCriteriaSchema,
     CANSLIMScoreSchema,
+    FundamentalIndicatorsResponse,
     ScreenerFilterSchema,
     ScreenerResponse,
     StockDetailSchema,
@@ -323,3 +325,37 @@ def get_stock_detail(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stock detail: {e}")
+
+
+@router.get(
+    "/stock/{symbol}/fundamentals",
+    response_model=ApiResponse[FundamentalIndicatorsResponse],
+    summary="ファンダメンタル指標取得",
+)
+async def get_stock_fundamentals(
+    symbol: str,
+) -> ApiResponse[FundamentalIndicatorsResponse]:
+    """銘柄のファンダメンタル指標を取得（yfinanceからリアルタイム取得）"""
+    try:
+        gateway = FundamentalsGateway()
+        indicators = await gateway.get_indicators(symbol.upper())
+
+        if indicators is None:
+            raise HTTPException(status_code=404, detail=f"Stock not found: {symbol}")
+
+        response = FundamentalIndicatorsResponse(
+            symbol=indicators.symbol,
+            forward_pe=indicators.forward_pe,
+            peg_ratio=indicators.peg_ratio,
+            roe=indicators.roe,
+            operating_margin=indicators.operating_margin,
+            revenue_growth=indicators.revenue_growth,
+            beta=indicators.beta,
+        )
+
+        return ApiResponse(success=True, data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get fundamentals: {e}")
