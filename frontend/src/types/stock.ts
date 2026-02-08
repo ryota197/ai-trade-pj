@@ -118,6 +118,20 @@ export interface FinancialsResponse {
   retrieved_at: string;
 }
 
+/** ファンダメンタル指標 */
+export interface FundamentalIndicators {
+  symbol: string;
+  // バリュエーション
+  forward_pe: number | null;
+  peg_ratio: number | null;
+  // 収益性
+  roe: number | null;
+  operating_margin: number | null;
+  revenue_growth: number | null;
+  // リスク
+  beta: number | null;
+}
+
 /** ソートキー */
 export type SortKey =
   | "symbol"

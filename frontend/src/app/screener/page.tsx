@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import type { StockSummary } from "@/types/stock";
 
 import { FilterPanel } from "./_components/FilterPanel";
 import { StockTable } from "./_components/StockTable";
+import { FundamentalsModal } from "./_components/FundamentalsModal";
 import { useScreener } from "./_hooks/useScreener";
 
 /**
@@ -25,6 +28,8 @@ export default function ScreenerPage() {
     setSort,
     refetch,
   } = useScreener();
+
+  const [selectedStock, setSelectedStock] = useState<StockSummary | null>(null);
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,11 +100,20 @@ export default function ScreenerPage() {
               sortKey={sortKey}
               sortOrder={sortOrder}
               onSort={setSort}
+              onStockClick={setSelectedStock}
               isLoading={isLoading}
             />
           </div>
         </div>
       </main>
+
+      {/* ファンダメンタル指標モーダル */}
+      {selectedStock && (
+        <FundamentalsModal
+          stock={selectedStock}
+          onClose={() => setSelectedStock(null)}
+        />
+      )}
     </div>
   );
 }
