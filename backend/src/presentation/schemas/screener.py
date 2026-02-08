@@ -10,6 +10,44 @@ from src.services.constants import CANSLIMDefaults
 _D = CANSLIMDefaults
 
 
+class PriceBarSchema(BaseModel):
+    """株価バースキーマ"""
+
+    time: str = Field(..., description="日付（YYYY-MM-DD）")
+    open: float = Field(..., description="始値")
+    high: float = Field(..., description="高値")
+    low: float = Field(..., description="安値")
+    close: float = Field(..., description="終値")
+    volume: int = Field(..., description="出来高")
+
+
+class ChartDataResponse(BaseModel):
+    """チャートデータレスポンス"""
+
+    symbol: str = Field(..., description="ティッカーシンボル")
+    period: str = Field(..., description="期間")
+    data: list[PriceBarSchema] = Field(..., description="価格データ")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "symbol": "AAPL",
+                "period": "3mo",
+                "data": [
+                    {
+                        "time": "2024-11-01",
+                        "open": 180.5,
+                        "high": 182.0,
+                        "low": 179.8,
+                        "close": 181.2,
+                        "volume": 45000000,
+                    }
+                ],
+            }
+        }
+    }
+
+
 class CANSLIMCriteriaSchema(BaseModel):
     """CAN-SLIM基準項目スキーマ"""
 

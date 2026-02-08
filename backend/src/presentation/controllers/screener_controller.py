@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.adapters.database import get_db
-from src.adapters.yfinance import FundamentalsGateway
+from src.adapters.yfinance import FundamentalsGateway, YFinanceGateway
 from src.models import CANSLIMStock
 from src.queries import CANSLIMStockQuery
 from src.services.constants import CANSLIMDefaults
@@ -16,7 +16,9 @@ from src.presentation.schemas.common import ApiResponse
 from src.presentation.schemas.screener import (
     CANSLIMCriteriaSchema,
     CANSLIMScoreSchema,
+    ChartDataResponse,
     FundamentalIndicatorsResponse,
+    PriceBarSchema,
     ScreenerFilterSchema,
     ScreenerResponse,
     StockDetailSchema,
@@ -359,3 +361,46 @@ async def get_stock_fundamentals(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get fundamentals: {e}")
+
+
+@router.get(
+    "/stock/{symbol}/chart",
+    response_model=ApiResponse[ChartDataResponse],
+    summary="チャートデータ取得",
+)
+async def get_stock_chart(
+    symbol: str,
+    period: str = Query("3mo", pattern="^(1mo|3mo|6mo|1y)$"),
+) -> ApiResponse[ChartDataResponse]:
+    """銘柄の価格チャートデータを取得（yfinanceからリアルタイム取得）"""
+    try:
+        gateway = YFinanceGateway()
+        history = await gateway.get_price_history(symbol.upper(), period=period)
+
+        if not history:
+            raise HTTPException(status_code=404, detail=f"Chart data not found: {symbol}")
+
+        data = [
+            PriceBarSchema(
+                time=bar.date.strftime("%Y-%m-%d"),
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                volume=bar.volume,
+            )
+            for bar in history
+        ]
+
+        response = ChartDataResponse(
+            symbol=symbol.upper(),
+            period=period,
+            data=data,
+        )
+
+        return ApiResponse(success=True, data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chart data: {e}")
