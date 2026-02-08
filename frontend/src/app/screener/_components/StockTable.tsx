@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { StockSummary, SortKey, SortOrder } from "@/types/stock";
@@ -17,7 +18,6 @@ interface StockTableProps {
   sortKey: SortKey;
   sortOrder: SortOrder;
   onSort: (key: SortKey) => void;
-  onStockClick?: (stock: StockSummary) => void;
   isLoading?: boolean;
 }
 
@@ -93,7 +93,6 @@ export function StockTable({
   sortKey,
   sortOrder,
   onSort,
-  onStockClick,
   isLoading = false,
 }: StockTableProps) {
   if (isLoading) {
@@ -190,13 +189,15 @@ export function StockTable({
               {stocks.map((stock) => (
                 <tr
                   key={stock.symbol}
-                  className="hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => onStockClick?.(stock)}
+                  className="hover:bg-muted/30 transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <span className="font-mono font-bold text-primary">
+                    <Link
+                      href={`/stock/${stock.symbol}`}
+                      className="font-mono font-bold text-primary hover:underline"
+                    >
                       {stock.symbol}
-                    </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-sm text-foreground truncate max-w-48 block">

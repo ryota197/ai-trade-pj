@@ -6,6 +6,8 @@ import { StockDetail } from "@/types/stock";
 import { StockHeader } from "./_components/StockHeader";
 import { CANSLIMScoreCard } from "./_components/CANSLIMScoreCard";
 import { PriceInfo } from "./_components/PriceInfo";
+import { PriceChart } from "./_components/PriceChart";
+import { FundamentalsCard } from "./_components/FundamentalsCard";
 
 export default function StockDetailPage() {
   const params = useParams();
@@ -85,12 +87,21 @@ export default function StockDetailPage() {
 
         {/* メインコンテンツ */}
         <div className="mt-8 space-y-6">
-          {/* CAN-SLIMスコア */}
-          {stock.canslim_score && (
-            <CANSLIMScoreCard score={stock.canslim_score} />
-          )}
+          {/* 価格チャート */}
+          <PriceChart symbol={symbol} />
 
-          {/* 価格情報・ファンダメンタル */}
+          {/* 2カラムレイアウト */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* CAN-SLIMスコア */}
+            {stock.canslim_score && (
+              <CANSLIMScoreCard score={stock.canslim_score} />
+            )}
+
+            {/* ファンダメンタル指標 */}
+            <FundamentalsCard symbol={symbol} />
+          </div>
+
+          {/* 価格情報 */}
           <PriceInfo stock={stock} />
         </div>
       </div>

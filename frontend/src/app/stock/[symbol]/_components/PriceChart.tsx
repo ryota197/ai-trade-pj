@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
-import type { ChartBar, ChartPeriod } from "../_hooks/useChartData";
-import { useChartData } from "../_hooks/useChartData";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useChartData, type ChartPeriod, type ChartBar } from "../_hooks/useChartData";
 
-interface MiniChartProps {
+interface PriceChartProps {
   symbol: string;
   height?: number;
 }
@@ -18,29 +18,20 @@ const PERIOD_OPTIONS: { value: ChartPeriod; label: string }[] = [
 ];
 
 /**
- * ミニチャートコンポーネント
+ * 価格チャートコンポーネント
  */
-export function MiniChart({ symbol, height = 200 }: MiniChartProps) {
+export function PriceChart({ symbol, height = 300 }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof import("lightweight-charts").createChart> | null>(null);
-  const [period, setPeriod] = useState<ChartPeriod>("3mo");
-  const { data, isLoading, error, fetchChartData, clear } = useChartData();
-
-  // データ取得
-  useEffect(() => {
-    fetchChartData(symbol, period);
-    return () => clear();
-  }, [symbol, period, fetchChartData, clear]);
+  const { data, isLoading, error, period, setPeriod } = useChartData(symbol);
 
   // チャート描画
   useEffect(() => {
     if (!data?.data || !chartContainerRef.current) return;
 
     const initChart = async () => {
-      // lightweight-chartsを動的インポート（SSR対策）
       const { createChart, ColorType, AreaSeries } = await import("lightweight-charts");
 
-      // 既存のチャートを破棄
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -49,17 +40,14 @@ export function MiniChart({ symbol, height = 200 }: MiniChartProps) {
       const container = chartContainerRef.current;
       if (!container) return;
 
-      // トレンド判定（開始時と終了時の価格比較）
       const firstClose = data.data[0]?.close ?? 0;
       const lastClose = data.data[data.data.length - 1]?.close ?? 0;
       const isUptrend = lastClose >= firstClose;
 
-      // カラー設定
       const lineColor = isUptrend ? "#22c55e" : "#ef4444";
       const topColor = isUptrend ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)";
       const bottomColor = isUptrend ? "rgba(34, 197, 94, 0.0)" : "rgba(239, 68, 68, 0.0)";
 
-      // チャート作成
       const chart = createChart(container, {
         width: container.clientWidth,
         height: height,
@@ -83,11 +71,8 @@ export function MiniChart({ symbol, height = 200 }: MiniChartProps) {
           vertLine: { labelVisible: false },
           horzLine: { labelVisible: true },
         },
-        handleScroll: false,
-        handleScale: false,
       });
 
-      // エリアシリーズ追加（v5 API）
       const areaSeries = chart.addSeries(AreaSeries, {
         lineColor: lineColor,
         topColor: topColor,
@@ -95,20 +80,15 @@ export function MiniChart({ symbol, height = 200 }: MiniChartProps) {
         lineWidth: 2,
       });
 
-      // データ変換（lightweight-charts形式）
       const chartData = data.data.map((bar: ChartBar) => ({
         time: bar.time,
         value: bar.close,
       }));
 
       areaSeries.setData(chartData);
-
-      // 全データを表示
       chart.timeScale().fitContent();
-
       chartRef.current = chart;
 
-      // リサイズ対応
       const handleResize = () => {
         if (chartRef.current && container) {
           chartRef.current.applyOptions({ width: container.clientWidth });
@@ -133,46 +113,45 @@ export function MiniChart({ symbol, height = 200 }: MiniChartProps) {
   }, [data, height]);
 
   return (
-    <div className="space-y-2">
-      {/* 期間選択 */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-muted-foreground">
-          価格チャート
-        </span>
-        <div className="flex gap-1">
-          {PERIOD_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => setPeriod(option.value)}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                period === option.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">価格チャート</CardTitle>
+          <div className="flex gap-1">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setPeriod(option.value)}
+                className={`px-3 py-1 text-sm rounded transition-colors ${
+                  period === option.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* チャートエリア */}
-      <div
-        className="rounded-lg overflow-hidden bg-muted/30"
-        style={{ height: `${height}px` }}
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center h-full text-sm text-red-500">
-            {error}
-          </div>
-        ) : (
-          <div ref={chartContainerRef} className="w-full h-full" />
-        )}
-      </div>
-    </div>
+      </CardHeader>
+      <CardContent>
+        <div
+          className="rounded-lg overflow-hidden bg-muted/30"
+          style={{ height: `${height}px` }}
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-full text-sm text-red-500">
+              {error}
+            </div>
+          ) : (
+            <div ref={chartContainerRef} className="w-full h-full" />
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
