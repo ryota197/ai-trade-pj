@@ -5,8 +5,9 @@ import { X, TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { StockSummary, FundamentalIndicators } from "@/types/stock";
+import type { StockSummary } from "@/types/stock";
 import { useFundamentals } from "../_hooks/useFundamentals";
+import { MiniChart } from "./MiniChart";
 
 interface FundamentalsModalProps {
   stock: StockSummary | null;
@@ -128,6 +129,11 @@ export function FundamentalsModal({ stock, onClose }: FundamentalsModalProps) {
         </CardHeader>
 
         <CardContent className="pt-4">
+          {/* チャートセクション */}
+          <div className="mb-6">
+            <MiniChart symbol={stock.symbol} height={180} />
+          </div>
+
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
