@@ -35,3 +35,8 @@ jobs:
 
             # 起動確認
             docker compose ps
+
+            # cron設定を適用
+            crontab infra/cron/trading-jobs.cron
+            echo "=== Cron jobs applied ==="
+            crontab -l
