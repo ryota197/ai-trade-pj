@@ -3,7 +3,7 @@
 # タイムゾーン: UTC
 
 # スクリーナー更新: 毎日 07:00 JST (= 22:00 UTC)
-0 22 * * * curl --max-time 600 -s -X POST http://localhost:8000/api/admin/screener/refresh >> /var/log/trading-jobs.log 2>&1
+0 22 * * * curl --max-time 600 -s -X POST http://localhost:8000/api/admin/screener/refresh -H "Content-Type: application/json" -d '{}' >> /var/log/trading-jobs.log 2>&1
 
 # マーケット更新: 6時間ごと (JST 0, 6, 12, 18時 = UTC 15, 21, 3, 9時)
 0 15,21,3,9 * * * curl --max-time 120 -s -X POST http://localhost:8000/api/admin/market/refresh >> /var/log/trading-jobs.log 2>&1
